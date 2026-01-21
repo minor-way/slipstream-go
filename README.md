@@ -99,7 +99,7 @@ Slipstream-Go tunnels network traffic through DNS queries and responses, encapsu
 ```bash
 ./bin/slipstream-client \
   --domain tunnel.example.com \
-  --resolver SERVER_IP:5353 \
+  --resolver RESOLVER_IP:53 \
   --pubkey-file server.pub
 ```
 
@@ -216,13 +216,13 @@ docker run -d \
 
 ### Client Options
 
-| Flag | Default | Description |
-|:-----|:--------|:------------|
-| `--domain` | *required* | Tunnel domain |
-| `--resolver` | `127.0.0.1:5353` | DNS resolver address |
+| Flag | Default          | Description |
+|:-----|:-----------------|:------------|
+| `--domain` | *required*       | Tunnel domain |
+| `--resolver` | `X.X.X.X:53`   | DNS resolver address |
 | `--listen` | `127.0.0.1:1080` | Local SOCKS5 address |
-| `--pubkey-file` | *required* | Server public key |
-| `--log-level` | `info` | `debug`/`info`/`warn`/`error` |
+| `--pubkey-file` | *required*       | Server public key |
+| `--log-level` | `info`           | `debug`/`info`/`warn`/`error` |
 
 ### Multi-Domain Example
 
