@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/minor-way/slipstream-go/main/.github/assets/logo.png" alt="Slipstream-Go" width="200" />
-</p>
-
-<h1 align="center">Slipstream-Go</h1>
+<h1 align="center">🌊 Slipstream-Go</h1>
 
 <p align="center">
   <strong>High-performance DNS tunneling with QUIC protocol</strong>
