@@ -1,226 +1,183 @@
-# Slipstream-Go
+<p align="center">
+  <img src="https://raw.githubusercontent.com/minor-way/slipstream-go/main/.github/assets/logo.png" alt="Slipstream-Go" width="200" />
+</p>
 
-A high-performance DNS tunneling solution that encapsulates QUIC traffic within DNS queries and responses. Written in Go for maximum portability and performance.
+<h1 align="center">Slipstream-Go</h1>
 
-## Features
+<p align="center">
+  <strong>High-performance DNS tunneling with QUIC protocol</strong>
+</p>
 
-### Core Capabilities
-- **QUIC over DNS** - Tunnels QUIC protocol through DNS TXT records
-- **SOCKS5 Proxy** - Client provides local SOCKS5 proxy interface
-- **Ed25519 Authentication** - Secure key-based server authentication with certificate pinning
-- **Multi-Domain Support** - Server accepts multiple tunnel domains
-- **Auto-Reconnection** - Client automatically reconnects with exponential backoff
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#docker">Docker</a> •
+  <a href="#license">License</a>
+</p>
 
-### Performance Optimizations
-- **Optimized Polling** - 10ms poll interval for low-latency responses
-- **Turbo Poll** - Immediate polling after receiving data
-- **Pre-fragmentation** - Server pre-fragments packets for efficient DNS responses
-- **Parallel Fragment Delivery** - Multiple fragments per DNS response
-- **Memory Management** - Configurable memory limits with Go's soft memory cap
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go" alt="Go Version" />
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
+  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue" alt="Platform" />
+  <img src="https://img.shields.io/github/stars/minor-way/slipstream-go?style=social" alt="Stars" />
+</p>
 
-### Enhancements over Rust/C Implementations
+---
 
-| Feature | Slipstream-Go | Rust Version | C Version |
-|---------|--------------|--------------|-----------|
-| Auto-reconnect | Yes | No | No |
-| Multi-domain | Yes | Single | Single |
+## What is Slipstream?
+
+Slipstream-Go tunnels network traffic through DNS queries and responses, encapsulating the QUIC protocol within DNS TXT records. This enables secure, authenticated connections in network environments where traditional protocols are restricted.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│   📱 App ──► 🔌 SOCKS5 ──► 📡 DNS Queries ──► 🖥️ Server ──► 🌐 Internet     │
+│                              (QUIC in TXT)                                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## ✨ Features
+
+<table>
+<tr>
+<td width="50%">
+
+### 🚀 Core
+- **QUIC over DNS** - Modern protocol tunneling
+- **SOCKS5 Proxy** - Standard proxy interface
+- **Ed25519 Auth** - Secure key-based authentication
+- **Multi-Domain** - Multiple tunnel domains per server
+- **Auto-Reconnect** - Exponential backoff recovery
+
+</td>
+<td width="50%">
+
+### ⚡ Performance
+- **10ms Polling** - Low-latency responses
+- **Turbo Poll** - Immediate data retrieval
+- **Pre-fragmentation** - Optimized packet delivery
+- **Memory Limits** - Configurable soft caps
+- **~1-2s Latency** - Comparable to alternatives
+
+</td>
+</tr>
+</table>
+
+---
+
+## 📊 Comparison
+
+| Feature | Slipstream-Go | Rust | C |
+|:--------|:-------------:|:----:|:-:|
+| Auto-reconnect | ✅ | ❌ | ❌ |
+| Multi-domain | ✅ | ❌ | ❌ |
 | Memory management | Soft limit | Manual | Manual |
-| Build complexity | `go build` | Cargo + deps | Make + libs |
-| Cross-compilation | Built-in | Requires setup | Complex |
-| Binary size | ~10MB | ~5MB | ~2MB |
-| Startup time | ~50ms | ~30ms | ~10ms |
-| Response latency | ~1-2s | ~1-2s | ~1-2s |
+| Build complexity | `go build` | Cargo | Make |
+| Cross-compilation | Built-in | Setup needed | Complex |
 
-## Architecture
+---
 
-```
-┌─────────────────┐         DNS Queries          ┌─────────────────┐
-│                 │  ──────────────────────────▶ │                 │
-│  Slipstream     │    (QUIC packets in TXT)     │  Slipstream     │
-│  Client         │                              │  Server         │
-│                 │  ◀────────────────────────── │                 │
-│  SOCKS5 Proxy   │       DNS Responses          │  DNS Server     │
-│  (localhost)    │    (QUIC packets in TXT)     │                 │
-└─────────────────┘                              └─────────────────┘
-        │                                                │
-        │ SOCKS5                                        │ Direct/SOCKS5
-        ▼                                                ▼
-   Applications                                    Target Servers
-```
+## 🚀 Quick Start
 
-### Data Flow
-1. Application connects to local SOCKS5 proxy (client)
-2. Client encodes QUIC packets as Base32 in DNS query labels
-3. DNS queries traverse network to server
-4. Server decodes packets, forwards via QUIC to targets
-5. Responses return via DNS TXT records (Base64 encoded)
-
-## Installation
-
-### Prerequisites
-- Go 1.21 or later
-
-### Build from Source
-
-```bash
-# Clone the repository
-git clone https://github.com/minor-way/slipstream-go.git
-cd slipstream-go
-
-# Build binaries
-go build -o bin/slipstream-server ./cmd/server
-go build -o bin/slipstream-client ./cmd/client
-
-# Or use the deployment script
-./deploy.sh build
-```
-
-### Docker
-
-```bash
-# Build server image
-docker build --target server -t slipstream-server .
-
-# Build client image
-docker build --target client -t slipstream-client .
-
-# Build combined image
-docker build -t slipstream-go .
-```
-
-## Quick Start
-
-### 1. Generate Keys
-
+### 1️⃣ Generate Keys
 ```bash
 ./bin/slipstream-server --gen-key \
-  --privkey-file keys/server.key \
-  --pubkey-file keys/server.pub
+  --privkey-file server.key \
+  --pubkey-file server.pub
 ```
 
-### 2. Start Server
-
+### 2️⃣ Start Server
 ```bash
 ./bin/slipstream-server \
   --domain tunnel.example.com \
   --dns-port 5353 \
-  --target-type direct \
-  --privkey-file keys/server.key \
-  --log-level info
+  --privkey-file server.key
 ```
 
-### 3. Start Client
-
+### 3️⃣ Start Client
 ```bash
 ./bin/slipstream-client \
   --domain tunnel.example.com \
-  --resolver YOUR_SERVER_IP:5353 \
-  --listen 127.0.0.1:1080 \
-  --pubkey-file keys/server.pub \
-  --log-level info
+  --resolver SERVER_IP:5353 \
+  --pubkey-file server.pub
 ```
 
-### 4. Use the Tunnel
-
+### 4️⃣ Use It
 ```bash
-# Test with curl
 curl -x socks5://127.0.0.1:1080 https://ifconfig.me
-
-# Configure browser to use SOCKS5 proxy at 127.0.0.1:1080
 ```
 
-## Usage
+---
 
-### Interactive Deployment
+## 📦 Installation
+
+### From Source
 
 ```bash
+# Clone
+git clone https://github.com/minor-way/slipstream-go.git
+cd slipstream-go
+
+# Build
+go build -o bin/slipstream-server ./cmd/server
+go build -o bin/slipstream-client ./cmd/client
+```
+
+### Using Deploy Script
+
+```bash
+# Interactive setup
 ./deploy.sh
+
+# Or directly
+./deploy.sh build    # Build only
+./deploy.sh server   # Configure & run server
+./deploy.sh client   # Configure & run client
+./deploy.sh genkey   # Generate keys
 ```
 
-The interactive script guides you through:
-- Choosing server or client deployment
-- Configuring all options
-- Generating keys
-- Starting the service
+---
 
-### Server Options
+## 🐳 Docker
 
-```
-Usage: slipstream-server [options]
-
-Options:
-  --domain string        Allowed tunnel domain (can be specified multiple times)
-  --dns-port int         DNS server port (default 5353)
-  --target-type string   Target type: direct or socks5 (default "direct")
-  --target string        Upstream SOCKS5 address (required if target-type=socks5)
-  --privkey-file string  Ed25519 private key file
-  --pubkey-file string   Public key output file (with --gen-key)
-  --gen-key              Generate keys and exit
-  --log-level string     Log level: debug/info/warn/error (default "info")
-  --memory-limit int     Memory limit in MB (default 400)
-```
-
-### Client Options
-
-```
-Usage: slipstream-client [options]
-
-Options:
-  --domain string        Tunnel domain
-  --resolver string      DNS resolver address (default "127.0.0.1:5353")
-  --listen string        Local SOCKS5 listen address (default "127.0.0.1:1080")
-  --pubkey-file string   Server public key file
-  --log-level string     Log level: debug/info/warn/error (default "info")
-```
-
-### Multi-Domain Configuration
-
-Server can accept connections from multiple domains:
+### Build Images
 
 ```bash
-./bin/slipstream-server \
-  --domain tunnel1.example.com \
-  --domain tunnel2.example.com \
-  --domain vpn.example.org \
-  --dns-port 5353 \
-  --privkey-file keys/server.key
+# Server only
+docker build --target server -t slipstream-server .
+
+# Client only
+docker build --target client -t slipstream-client .
+
+# Combined
+docker build -t slipstream-go .
 ```
 
-Clients connecting with unregistered domains are rejected with a DNS REFUSED response.
+### Run with Docker Compose
 
-## Docker Deployment
-
-### Using Docker Compose
-
-1. Create `.env` file:
 ```bash
-DOMAIN=tunnel.example.com
-DNS_PORT=5353
-SOCKS_PORT=1080
-TARGET_TYPE=direct
-LOG_LEVEL=info
-MEMORY_LIMIT=400
-RESOLVER=your-server-ip:5353
-```
+# Copy and edit environment
+cp .env.example .env
 
-2. Generate keys:
-```bash
-./deploy.sh genkey
-```
-
-3. Start services:
-```bash
 # Start server
 docker-compose up -d server
 
-# Start client (usually on different machine)
+# Start client (different machine)
 docker-compose up -d client
 ```
 
-### Manual Docker Commands
+### Manual Docker Run
 
+<details>
+<summary>📋 Click to expand</summary>
+
+**Server:**
 ```bash
-# Server
 docker run -d \
   --name slipstream-server \
   -p 5353:5353/udp \
@@ -228,8 +185,10 @@ docker run -d \
   slipstream-server \
   --domain tunnel.example.com \
   --privkey-file /app/keys/server.key
+```
 
-# Client
+**Client:**
+```bash
 docker run -d \
   --name slipstream-client \
   -p 1080:1080 \
@@ -241,18 +200,95 @@ docker run -d \
   --pubkey-file /app/keys/server.pub
 ```
 
-## Logs
+</details>
+
+---
+
+## 📖 Usage
+
+### Server Options
+
+| Flag | Default | Description |
+|:-----|:--------|:------------|
+| `--domain` | *required* | Allowed tunnel domain (repeatable) |
+| `--dns-port` | `5353` | DNS server port |
+| `--target-type` | `direct` | `direct` or `socks5` |
+| `--target` | - | Upstream SOCKS5 address |
+| `--privkey-file` | *required* | Ed25519 private key |
+| `--log-level` | `info` | `debug`/`info`/`warn`/`error` |
+| `--memory-limit` | `400` | Memory limit in MB |
+
+### Client Options
+
+| Flag | Default | Description |
+|:-----|:--------|:------------|
+| `--domain` | *required* | Tunnel domain |
+| `--resolver` | `127.0.0.1:5353` | DNS resolver address |
+| `--listen` | `127.0.0.1:1080` | Local SOCKS5 address |
+| `--pubkey-file` | *required* | Server public key |
+| `--log-level` | `info` | `debug`/`info`/`warn`/`error` |
+
+### Multi-Domain Example
+
+```bash
+./bin/slipstream-server \
+  --domain tunnel1.example.com \
+  --domain tunnel2.example.com \
+  --domain vpn.example.org \
+  --privkey-file server.key
+```
+
+> ⚠️ Clients with unregistered domains receive DNS REFUSED
+
+---
+
+## 🔧 Architecture
+
+```
+┌─────────────────┐                              ┌─────────────────┐
+│                 │         DNS Queries          │                 │
+│   Slipstream    │  ─────────────────────────►  │   Slipstream    │
+│   Client        │     (QUIC in Base32)         │   Server        │
+│                 │                              │                 │
+│  ┌───────────┐  │  ◄─────────────────────────  │  ┌───────────┐  │
+│  │  SOCKS5   │  │      DNS TXT Responses       │  │    DNS    │  │
+│  │  Proxy    │  │     (QUIC in Base64)         │  │  Handler  │  │
+│  └───────────┘  │                              │  └───────────┘  │
+└────────┬────────┘                              └────────┬────────┘
+         │                                                │
+         │ SOCKS5                                         │ Direct/SOCKS5
+         ▼                                                ▼
+   ┌──────────┐                                    ┌──────────────┐
+   │   Apps   │                                    │   Internet   │
+   └──────────┘                                    └──────────────┘
+```
+
+### Data Flow
+
+1. **App** connects to local SOCKS5 proxy
+2. **Client** encodes QUIC packets as Base32 in DNS labels
+3. **DNS queries** traverse the network
+4. **Server** decodes and forwards via QUIC
+5. **Responses** return as Base64 in TXT records
+
+---
+
+## 📋 Logs
 
 ### Log Levels
 
-- **debug** - Detailed packet-level logging (development only)
-- **info** - Connection events and status (recommended)
-- **warn** - Warnings and rejected connections
-- **error** - Errors only
+| Level | Use Case |
+|:------|:---------|
+| `debug` | Development, packet inspection |
+| `info` | Production, connection events |
+| `warn` | Rejected connections, issues |
+| `error` | Errors only |
 
-### Sample Log Output
+### Sample Output
 
-**Server startup:**
+<details>
+<summary>🖥️ Server Startup</summary>
+
 ```
 6:00PM INF Registered allowed domain domain=tunnel.example.com
 6:00PM INF Private key loaded
@@ -260,96 +296,121 @@ docker run -d \
 6:00PM INF Starting DNS server addr=:5353 domains=1
 ```
 
-**Client connection:**
+</details>
+
+<details>
+<summary>💻 Client Connection</summary>
+
 ```
 6:00PM INF Using server public key fingerprint=MA8SxzbX...
 6:00PM INF Generated session ID session=abc12345
-6:00PM INF Establishing QUIC connection over DNS domain=tunnel.example.com
+6:00PM INF Establishing QUIC connection over DNS
 6:00PM INF QUIC tunnel established
 6:00PM INF SOCKS5 server listening addr=127.0.0.1:1080
 ```
 
-**Connection handling:**
-```
-6:00PM INF New SOCKS5 connection from=127.0.0.1:52341
-6:00PM INF CONNECT target=example.com:443
-6:00PM INF Stream opened id=4
-```
+</details>
 
-**Auto-reconnection:**
+<details>
+<summary>🔄 Auto-Reconnection</summary>
+
 ```
 6:00PM WRN Connection health check failed, reconnecting...
 6:00PM INF Attempting reconnection attempt=1
 6:00PM INF QUIC tunnel re-established
 ```
 
-**Domain rejection:**
-```
-6:00PM WRN Rejected query for unregistered domain domain=unknown.com query=data.sess.unknown.com.
-```
+</details>
 
-## DNS Configuration
+---
 
-For production use, configure your authoritative DNS to delegate the tunnel subdomain:
+## 🌐 DNS Configuration
 
-```
-; In your zone file for example.com
+For production, delegate a subdomain to your server:
+
+```dns
+; Zone file for example.com
 tunnel    IN    NS    ns-tunnel.example.com.
 ns-tunnel IN    A     YOUR_SERVER_IP
 ```
 
-Then run the server on port 53:
+Then run on port 53:
 ```bash
 ./bin/slipstream-server --domain tunnel.example.com --dns-port 53 ...
 ```
 
-## Security Considerations
+---
 
-- **Key Management**: Keep private keys secure; distribute only public keys to clients
-- **Domain Validation**: Use specific domains; server rejects unregistered domains
-- **Certificate Pinning**: Client validates server certificate against public key
-- **Memory Limits**: Configure appropriate limits to prevent DoS
-- **Firewall**: Restrict DNS port access if possible
+## 🔒 Security
 
-## Performance Tuning
+| Aspect | Implementation |
+|:-------|:---------------|
+| **Authentication** | Ed25519 key pairs |
+| **Certificate Pinning** | Client validates server pubkey |
+| **Domain Validation** | Server rejects unknown domains |
+| **Memory Protection** | Configurable limits |
 
-### Server
-- Increase `--memory-limit` for high-traffic scenarios
-- Use `--target-type socks5` for additional anonymity layer
-- Deploy closer to target servers to reduce latency
+> 🔑 **Never share private keys** - only distribute `.pub` files to clients
 
-### Client
-- Use local DNS resolver for testing
-- Monitor reconnection frequency in logs
-- Consider multiple clients for load distribution
+---
 
-## Troubleshooting
+## 🐛 Troubleshooting
 
-### Connection Timeout
+<details>
+<summary><b>Connection Timeout</b></summary>
+
 - Verify DNS port is accessible (UDP)
 - Check firewall rules
 - Ensure domain is registered on server
 
-### Slow Performance
-- Check network latency to DNS server
-- Enable debug logging to identify bottlenecks
-- Verify no packet loss on network
+</details>
 
-### Authentication Failure
+<details>
+<summary><b>Slow Performance</b></summary>
+
+- Check network latency to DNS server
+- Enable debug logging
+- Verify no packet loss
+
+</details>
+
+<details>
+<summary><b>Authentication Failure</b></summary>
+
 - Verify public key matches server's private key
 - Check key file permissions
-- Regenerate keys if corrupted
+- Regenerate keys if needed
 
-## Contributing
+</details>
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+---
 
-## License
+## 🤝 Contributing
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Contributions welcome! Feel free to:
 
-## Acknowledgments
+- 🐛 Report bugs
+- 💡 Suggest features
+- 🔧 Submit pull requests
 
-- Inspired by DNS tunneling research and tools like iodine, dnscat2
-- Built with [quic-go](https://github.com/quic-go/quic-go) for QUIC protocol
-- Uses [miekg/dns](https://github.com/miekg/dns) for DNS handling
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- Based on [slipstream-rust](https://github.com/Mygod/slipstream-rust/) by Mygod
+- Original concept [slipstream](https://github.com/EndPositive/slipstream) by EndPositive
+- Inspired by [iodine](https://code.kryo.se/iodine/), [dnscat2](https://github.com/iagox86/dnscat2)
+- Built with [quic-go](https://github.com/quic-go/quic-go)
+- DNS handling by [miekg/dns](https://github.com/miekg/dns)
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ for network freedom</sub>
+</p>
