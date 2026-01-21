@@ -1,0 +1,230 @@
+# =============================================
+# Go
+# =============================================
+
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+
+# Coverage
+*.out
+coverage.html
+coverage.txt
+.coverprofile
+
+# Go workspace
+go.work
+go.work.sum
+
+# Vendor (uncomment if you don't want to commit vendor/)
+# vendor/
+
+# Go build cache
+.go-build/
+
+# =============================================
+# Security - NEVER commit these!
+# =============================================
+
+# Private keys
+*.key
+*.pem
+!*.pub
+
+# Key directories
+keys/
+certs/
+secrets/
+
+# Environment files with secrets
+.env
+.env.*
+!.env.example
+
+# Credentials
+credentials.json
+service-account.json
+*.credentials
+
+# =============================================
+# IDE & Editors
+# =============================================
+
+# JetBrains (GoLand, IntelliJ)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Vim/Neovim
+*.swp
+*.swo
+*.swn
+*~
+.netrwhist
+Session.vim
+.vim/
+
+# Emacs
+*~
+\#*\#
+.#*
+*.elc
+.emacs.desktop
+.emacs.desktop.lock
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# =============================================
+# OS Generated
+# =============================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon?
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+
+# =============================================
+# Docker
+# =============================================
+
+# Docker build context
+.docker/
+docker-compose.override.yml
+
+# =============================================
+# Build & Output
+# =============================================
+
+# Build directories
+dist/
+build/
+out/
+target/
+
+# Generated scripts
+run-server.sh
+run-client.sh
+
+# =============================================
+# Logs & Temp
+# =============================================
+
+# Logs
+*.log
+logs/
+log/
+
+# Temp files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+
+# Cache
+.cache/
+cache/
+
+# =============================================
+# Testing & Profiling
+# =============================================
+
+# Test output
+testdata/output/
+test-results/
+
+# Profiling
+*.prof
+*.pprof
+cpu.out
+mem.out
+trace.out
+
+# Benchmarks
+bench.txt
+benchmarks/
+
+# =============================================
+# Miscellaneous
+# =============================================
+
+# Debug
+debug/
+*.debug
+
+# Core dumps
+core
+core.*
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Archives (usually not committed)
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# =============================================
+# Documentation
+# =============================================
+
+# Ignore all markdown files except README
+*.md
+!README.md
+
+# =============================================
+# Project Specific
+# =============================================
+
+# Serena
+.serena/
+
+# Test keys in root
+/server.pub
+/server.key
+
+# Local config overrides
+config.local.yaml
+config.local.json

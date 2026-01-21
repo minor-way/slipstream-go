@@ -1,0 +1,72 @@
+# Slipstream-Go Docker Compose Configuration
+#
+# Usage:
+#   1. Generate keys: ./deploy.sh genkey
+#   2. Update environment variables below
+#   3. Run: docker-compose up -d server  (for server)
+#      Or:  docker-compose up -d client  (for client)
+#
+# Note: Server and client are typically on different machines.
+#       This compose file is for reference and local testing.
+
+version: "3.8"
+
+services:
+  # ============================================
+  # DNS Tunnel Server
+  # ============================================
+  server:
+    build:
+      context: .
+      target: server
+    image: slipstream-server:latest
+    container_name: slipstream-server
+    restart: unless-stopped
+    ports:
+      - "${DNS_PORT:-5353}:5353/udp"
+    volumes:
+      - ./keys:/app/keys:ro
+    environment:
+      - TZ=${TZ:-UTC}
+    command:
+      - "--domain=${DOMAIN:-tunnel.local}"
+      - "--dns-port=5353"
+      - "--target-type=${TARGET_TYPE:-direct}"
+      - "--target=${TARGET:-}"
+      - "--privkey-file=/app/keys/server.key"
+      - "--log-level=${LOG_LEVEL:-info}"
+      - "--memory-limit=${MEMORY_LIMIT:-400}"
+    networks:
+      - slipstream
+
+  # ============================================
+  # SOCKS5 Tunnel Client
+  # ============================================
+  client:
+    build:
+      context: .
+      target: client
+    image: slipstream-client:latest
+    container_name: slipstream-client
+    restart: unless-stopped
+    ports:
+      - "${SOCKS_PORT:-1080}:1080"
+    volumes:
+      - ./keys:/app/keys:ro
+    environment:
+      - TZ=${TZ:-UTC}
+    command:
+      - "--domain=${DOMAIN:-tunnel.local}"
+      - "--resolver=${RESOLVER:-host.docker.internal:5353}"
+      - "--listen=0.0.0.0:1080"
+      - "--pubkey-file=/app/keys/server.pub"
+      - "--log-level=${LOG_LEVEL:-info}"
+    networks:
+      - slipstream
+    # For Linux hosts, use host networking or configure DNS resolver IP
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+networks:
+  slipstream:
+    driver: bridge
