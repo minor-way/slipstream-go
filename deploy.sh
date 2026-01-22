@@ -20,7 +20,7 @@ BIN_DIR="${SCRIPT_DIR}/bin"
 
 # GitHub release info
 GITHUB_REPO="minor-way/slipstream-go"
-VERSION="v1.0.0"
+VERSION="v1.1.0"
 
 print_banner() {
     echo -e "${CYAN}"
