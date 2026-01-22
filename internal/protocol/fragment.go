@@ -26,8 +26,8 @@ const FragHeaderLen = 4
 //   - Rust formula: mtu = (240 - domain_len) / 1.6
 //   - For 20-char domain: ~137 bytes
 //
-// Use 132 bytes as default (safe for most domains up to ~30 chars)
-const MaxChunkSize = 132
+// Use 124 bytes as default (provides extra safety margin for restrictive resolvers)
+const MaxChunkSize = 124
 
 func init() {
 	rand.Seed(time.Now().UnixNano())

@@ -60,21 +60,23 @@ func (vc *VirtualConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}
 
 	sess := vc.Sessions.GetOrCreate(sessAddr.SessionID)
-
-	// Fragment the packet before queueing
 	fragments := protocol.FragmentPacket(p)
-	log.Debug().Str("sess", sessAddr.SessionID).Int("pktLen", len(p)).Int("fragCount", len(fragments)).Msg("WriteTo: fragmenting packet for downstream")
 
-	// Queue fragments once - QUIC's built-in retransmission handles reliability
-	// Double-sending was causing 2x overhead and congestion
-	// Note: If packet loss is high, consider selective duplication for Initial packets only
-	for _, frag := range fragments {
-		select {
-		case sess.FragQueue <- frag:
-		default:
-			// Drop if full (Congestion Control)
-			log.Debug().Str("sess", sessAddr.SessionID).Msg("WriteTo: FragQueue full, dropping fragment")
-			return 0, nil
+	// REDUNDANCY FIX: Apply duplicate sending for large downstream packets (ServerHello)
+	redundancy := 1
+	if len(p) >= 1000 {
+		redundancy = 2
+		log.Debug().Str("sess", sessAddr.SessionID).Int("len", len(p)).Msg("Applying 2x redundancy for large downstream packet")
+	}
+
+	for r := 0; r < redundancy; r++ {
+		for _, frag := range fragments {
+			select {
+			case sess.FragQueue <- frag:
+			default:
+				log.Debug().Str("sess", sessAddr.SessionID).Msg("WriteTo: FragQueue full, dropping fragment")
+				return 0, nil
+			}
 		}
 	}
 

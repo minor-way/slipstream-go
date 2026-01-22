@@ -86,35 +86,38 @@ func (c *DnsPacketConn) Close() error {
 func (c *DnsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	// IGNORE 'addr' (It is the dummy 127.0.0.1 from QUIC)
 
-	// Update Activity
 	c.mu.Lock()
 	c.lastTxTime = time.Now()
 	c.mu.Unlock()
 
-	// 1. Fragment Logic
 	fragments := FragmentPacket(p)
 
-	// 2. Determine redundancy level based on packet size
-	// Large packets (1200+ bytes) are likely Initial/Handshake packets
-	// These need higher redundancy because losing any fragment loses the whole packet
-	// Small packets (post-handshake) can rely more on QUIC retransmission
+	// Redundancy strategy:
+	// Handshake packets (Large) need redundancy but MUST BE PACED to avoid resolver drops.
 	redundancy := 1
 	if len(p) >= 1000 {
-		redundancy = 2 // Send twice for large packets (handshake)
+		redundancy = 2
 	}
 
-	// 3. Queue Fragments with redundancy
 	for r := 0; r < redundancy; r++ {
 		for _, frag := range fragments {
 			select {
 			case c.txQueue <- frag:
+				// PACING FIX: Slight delay between queueing fragments
+				// This prevents the txWorkers from blasting the resolver instantly
+				if redundancy > 1 {
+					time.Sleep(2 * time.Millisecond)
+				}
 			case <-time.After(WriteTimeout):
-				// Backpressure: If queue full, block then drop
 				log.Warn().Msg("TX Queue Full - Drop")
-				return 0, nil // Return nil so QUIC doesn't crash, just retransmits
+				return 0, nil
 			case <-c.done:
 				return 0, net.ErrClosed
 			}
+		}
+		// Wait longer between redundancy batches
+		if r < redundancy-1 {
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 	return len(p), nil
