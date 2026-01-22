@@ -154,6 +154,44 @@ generate_keys() {
     print_success "Keys generated in ${CONFIG_DIR}/"
 }
 
+setup_iptables_redirect() {
+    local target_port="$1"
+
+    # Skip if target port is 53 (no redirect needed)
+    if [ "$target_port" = "53" ]; then
+        return 0
+    fi
+
+    print_info "Setting up iptables redirect from port 53 to ${target_port}..."
+
+    # Get primary network interface
+    local interface
+    interface=$(ip route | grep default | awk '{print $5}' | head -1)
+    if [ -z "$interface" ]; then
+        interface="eth0"
+    fi
+
+    # Remove existing redirect rules (if any)
+    iptables -t nat -D PREROUTING -i "$interface" -p udp --dport 53 -j REDIRECT --to-ports "$target_port" 2>/dev/null || true
+
+    # Add new redirect rule
+    iptables -t nat -A PREROUTING -i "$interface" -p udp --dport 53 -j REDIRECT --to-ports "$target_port"
+
+    # Allow traffic on target port
+    iptables -I INPUT -p udp --dport "$target_port" -j ACCEPT 2>/dev/null || true
+
+    # Save iptables rules
+    if command -v netfilter-persistent &> /dev/null; then
+        netfilter-persistent save 2>/dev/null || true
+    elif [ -f /etc/debian_version ]; then
+        iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+    elif [ -f /etc/redhat-release ]; then
+        iptables-save > /etc/sysconfig/iptables 2>/dev/null || true
+    fi
+
+    print_success "iptables redirect configured: 53 -> ${target_port}"
+}
+
 get_server_input() {
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
@@ -173,9 +211,9 @@ get_server_input() {
     done
 
     # DNS Port
-    print_question "Enter DNS server port [default: 53]: "
+    print_question "Enter DNS server port [default: 5353]: "
     read -r DNS_PORT
-    DNS_PORT=${DNS_PORT:-53}
+    DNS_PORT=${DNS_PORT:-5353}
 
     # Target Type
     echo ""
@@ -252,6 +290,9 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
+
+    # Setup iptables redirect (53 -> target port)
+    setup_iptables_redirect "$DNS_PORT"
 
     # Reload and enable service
     systemctl daemon-reload
@@ -494,26 +535,24 @@ handle_menu() {
                 ;;
             3)
                 echo ""
-                if systemctl is-active --quiet slipstream-server; then
-                    print_success "slipstream-server is running"
+                if [ -f /etc/systemd/system/slipstream-server.service ]; then
                     systemctl status slipstream-server --no-pager -l
-                elif systemctl is-active --quiet slipstream-client; then
-                    print_success "slipstream-client is running"
+                elif [ -f /etc/systemd/system/slipstream-client.service ]; then
                     systemctl status slipstream-client --no-pager -l
                 else
-                    print_warning "No slipstream service is running"
+                    print_warning "No slipstream service installed"
                 fi
                 ;;
             4)
                 echo ""
-                if systemctl is-active --quiet slipstream-server; then
+                if [ -f /etc/systemd/system/slipstream-server.service ]; then
                     print_info "Showing slipstream-server logs (Ctrl+C to exit)..."
                     journalctl -u slipstream-server -f
-                elif systemctl is-active --quiet slipstream-client; then
+                elif [ -f /etc/systemd/system/slipstream-client.service ]; then
                     print_info "Showing slipstream-client logs (Ctrl+C to exit)..."
                     journalctl -u slipstream-client -f
                 else
-                    print_warning "No slipstream service is running"
+                    print_warning "No slipstream service installed"
                 fi
                 ;;
             5)
