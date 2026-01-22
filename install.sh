@@ -469,7 +469,8 @@ get_client_input() {
 
     # Public key
     while true; do
-        print_question "Enter server public key (base64 string from server): "
+        echo -e "${BLUE}Enter server public key (the base64 line from server.pub):${NC}"
+        print_question "> "
         read -r PUBKEY
         if [[ -n "$PUBKEY" ]]; then
             break
@@ -485,9 +486,19 @@ get_client_input() {
 }
 
 deploy_client() {
-    # Save public key
+    # Save public key (add PEM headers if missing)
     setup_config_dir
-    echo "$PUBKEY" > "${CONFIG_DIR}/server.pub"
+    if [[ "$PUBKEY" == *"-----BEGIN"* ]]; then
+        # Already has PEM headers
+        echo "$PUBKEY" > "${CONFIG_DIR}/server.pub"
+    else
+        # Add PEM headers
+        cat > "${CONFIG_DIR}/server.pub" << EOF
+-----BEGIN PUBLIC KEY-----
+${PUBKEY}
+-----END PUBLIC KEY-----
+EOF
+    fi
     chmod 644 "${CONFIG_DIR}/server.pub"
 
     # Create systemd service
