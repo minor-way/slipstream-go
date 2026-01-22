@@ -543,7 +543,7 @@ handle_menu() {
 print_banner
 check_root
 
-# If running from pipe (not installed location), install script first then run it
+# If running from pipe (not installed location), install and show instructions
 if [ "$0" != "$SCRIPT_INSTALL_PATH" ]; then
     print_info "First-time setup - installing script and binaries..."
 
@@ -553,13 +553,18 @@ if [ "$0" != "$SCRIPT_INSTALL_PATH" ]; then
     setup_config_dir
     install_script
 
-    print_success "Installation complete!"
     echo ""
-    print_info "Starting configuration menu..."
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║              Installation Complete!                       ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-
-    # Execute the installed script for interactive menu
-    exec "$SCRIPT_INSTALL_PATH"
+    echo -e "${CYAN}To configure Slipstream, run:${NC}"
+    echo ""
+    echo -e "  ${YELLOW}sudo slipstream-deploy${NC}"
+    echo ""
+    echo -e "${CYAN}This will show an interactive menu to set up server or client.${NC}"
+    echo ""
+    exit 0
 fi
 
 # Running from installed location - show menu
