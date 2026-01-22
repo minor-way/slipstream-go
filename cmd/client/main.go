@@ -50,6 +50,12 @@ func NewTunnelManager(resolver, domain string, tlsConfig *tls.Config) *TunnelMan
 			MaxIdleTimeout:             60 * time.Second,
 			MaxStreamReceiveWindow:     6 * 1024 * 1024,
 			MaxConnectionReceiveWindow: 15 * 1024 * 1024,
+			// Optimal MTU for Iran: 512-768 bytes (benchmarked)
+			// 600 bytes / 120 bytes per fragment = 5 fragments
+			// QUIC Initial packets will still be padded to 1200 bytes per spec
+			InitialPacketSize: 600,
+			// Disable PMTU discovery to keep packets small after handshake
+			DisablePathMTUDiscovery: true,
 		},
 	}
 }

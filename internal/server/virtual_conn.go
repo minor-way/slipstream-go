@@ -2,9 +2,11 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"slipstream-go/internal/protocol"
 )
 
@@ -31,11 +33,12 @@ func NewVirtualConn(sm *SessionManager) *VirtualConn {
 
 // InjectPacket is called by DNSHandler when a full packet is reassembled.
 func (vc *VirtualConn) InjectPacket(data []byte, sessionID string) {
+	log.Debug().Str("sess", sessionID).Int("len", len(data)).Msg("InjectPacket: pushing to QUIC")
 	addr := &SessionAddr{SessionID: sessionID}
 	select {
 	case vc.Incoming <- PacketBundle{Data: data, Addr: addr}:
 	default:
-		// Drop if full
+		log.Warn().Str("sess", sessionID).Msg("InjectPacket: Incoming channel full, dropping")
 	}
 }
 
@@ -52,6 +55,7 @@ func (vc *VirtualConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (vc *VirtualConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	sessAddr, ok := addr.(*SessionAddr)
 	if !ok {
+		log.Error().Str("addrType", fmt.Sprintf("%T", addr)).Msg("WriteTo: invalid address type")
 		return 0, errors.New("invalid address type")
 	}
 
@@ -59,13 +63,17 @@ func (vc *VirtualConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	// Fragment the packet before queueing
 	fragments := protocol.FragmentPacket(p)
+	log.Debug().Str("sess", sessAddr.SessionID).Int("pktLen", len(p)).Int("fragCount", len(fragments)).Msg("WriteTo: fragmenting packet for downstream")
 
-	// Queue all fragments
+	// Queue fragments once - QUIC's built-in retransmission handles reliability
+	// Double-sending was causing 2x overhead and congestion
+	// Note: If packet loss is high, consider selective duplication for Initial packets only
 	for _, frag := range fragments {
 		select {
 		case sess.FragQueue <- frag:
 		default:
 			// Drop if full (Congestion Control)
+			log.Debug().Str("sess", sessAddr.SessionID).Msg("WriteTo: FragQueue full, dropping fragment")
 			return 0, nil
 		}
 	}

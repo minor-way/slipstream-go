@@ -45,7 +45,7 @@ func main() {
 	genKey := flag.Bool("gen-key", false, "Generate keys and exit")
 	logLevel := flag.String("log-level", "info", "Log level: debug/info/warn/error")
 	memoryLimit := flag.Int("memory-limit", 400, "Memory limit in MB")
-	maxFrags := flag.Int("max-frags", 5, "Max fragments per DNS response (1-10)")
+	maxFrags := flag.Int("max-frags", 10, "Max fragments per DNS response (1-20)")
 
 	flag.Parse()
 
@@ -160,8 +160,17 @@ func main() {
 		}
 	}()
 
-	// Create QUIC listener on virtual connection
-	quicListener, err := quic.Listen(virtualConn, tlsConfig, &quic.Config{
+	// Create Transport with address validation to force Retry packets
+	// This bypasses the 3x amplification limit that causes handshake deadlock
+	// when certificate chain exceeds 3600 bytes and ACKs get lost in DNS tunnel
+	transport := &quic.Transport{
+		Conn: virtualConn,
+		// CRITICAL: Force address validation via Retry packet for ALL connections
+		VerifySourceAddress: func(net.Addr) bool { return true },
+	}
+
+	// Create QUIC listener on transport
+	quicListener, err := transport.Listen(tlsConfig, &quic.Config{
 		KeepAlivePeriod:            15 * time.Second, // Send keepalive every 15s
 		MaxIdleTimeout:             5 * time.Minute,  // 5 minute idle timeout
 		EnableDatagrams:            false,
@@ -169,6 +178,12 @@ func main() {
 		MaxIncomingUniStreams:      1000,
 		MaxStreamReceiveWindow:     6 * 1024 * 1024,
 		MaxConnectionReceiveWindow: 15 * 1024 * 1024,
+		// Optimal MTU for Iran: 512-768 bytes (benchmarked)
+		// 600 bytes / 120 bytes per fragment = 5 fragments
+		// QUIC Initial packets will still be padded to 1200 bytes per spec
+		InitialPacketSize: 600,
+		// Disable PMTU discovery to keep packets small
+		DisablePathMTUDiscovery: true,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create QUIC listener")

@@ -7,8 +7,9 @@ import (
 )
 
 type Reassembler struct {
-	pending map[uint16]*PendingPacket
-	mu      sync.Mutex
+	pending   map[uint16]*PendingPacket
+	completed map[uint16]time.Time // Track recently completed packet IDs to ignore duplicates
+	mu        sync.Mutex
 }
 
 type PendingPacket struct {
@@ -20,7 +21,8 @@ type PendingPacket struct {
 
 func NewReassembler() *Reassembler {
 	return &Reassembler{
-		pending: make(map[uint16]*PendingPacket),
+		pending:   make(map[uint16]*PendingPacket),
+		completed: make(map[uint16]time.Time),
 	}
 }
 
@@ -38,6 +40,19 @@ func (r *Reassembler) IngestChunk(data []byte) []byte {
 	total := int(data[2])
 	seq := int(data[3])
 	payload := data[4:]
+
+	// Check if this packet was recently completed (ignore duplicate fragments)
+	if _, wasCompleted := r.completed[packetID]; wasCompleted {
+		return nil
+	}
+
+	// Cleanup old completed entries (keep for 30 seconds)
+	now := time.Now()
+	for id, completedAt := range r.completed {
+		if now.Sub(completedAt) > 30*time.Second {
+			delete(r.completed, id)
+		}
+	}
 
 	pkt, exists := r.pending[packetID]
 	if !exists {
@@ -60,6 +75,7 @@ func (r *Reassembler) IngestChunk(data []byte) []byte {
 
 	if pkt.Received == pkt.Total {
 		delete(r.pending, packetID)
+		r.completed[packetID] = now // Mark as completed to ignore future duplicates
 		var full []byte
 		for _, chunk := range pkt.Chunks {
 			full = append(full, chunk...)

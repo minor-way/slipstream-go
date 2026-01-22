@@ -124,14 +124,19 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	msg.Compress = true
 
 	// Pack multiple fragments per response (configurable via --max-frags)
-	// Each base64-encoded fragment is ~165 bytes
+	// Each base64-encoded fragment is ~180 bytes (132 raw * 4/3 base64 + header)
+	// Packing more fragments reduces round-trips dramatically
 	maxFrags := h.MaxFragsPerResponse
 	if maxFrags <= 0 {
-		maxFrags = 5 // default
+		maxFrags = 10 // default increased from 5 for better throughput
 	}
 	fragsSent := 0
 
 	// Send fragments from queue until limit reached
+	queueLen := len(sess.FragQueue)
+	if queueLen > 0 {
+		log.Debug().Str("sess", sessionID).Int("queueLen", queueLen).Msg("FragQueue has pending data")
+	}
 	for fragsSent < maxFrags {
 		select {
 		case frag := <-sess.FragQueue:
@@ -141,6 +146,7 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 				Txt: []string{encoded},
 			})
 			fragsSent++
+			log.Debug().Str("sess", sessionID).Int("fragLen", len(frag)).Int("fragsSent", fragsSent).Msg("Queued fragment for response")
 		default:
 			// Queue is empty
 			goto sendResponse

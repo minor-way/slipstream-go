@@ -11,14 +11,21 @@ import (
 const FragHeaderLen = 4
 
 // Max payload per DNS query to stay safe (253 chars QNAME limit)
-// Calculation:
-//   - Reserve ~25 chars for ".session.domain." suffix
-//   - Available for data: ~228 chars including label dots
-//   - With 3 dots between 4 labels: 224 chars base32 data
-//   - 224 base32 chars = 224 * 5 / 8 = 140 bytes raw
-//   - Subtract 4 byte header = 136 bytes max payload
-// Use 120 bytes for safety margin
-const MaxChunkSize = 120
+// Calculation based on Rust reference implementation:
+//   - DNS QNAME max length: 253 chars
+//   - Domain suffix (e.g., ".n.example.com."): ~20 chars typical
+//   - Session ID (e.g., ".abcd1234."): ~10 chars
+//   - Available for data labels: ~223 chars
+//   - With dots every 57 chars (DNS label limit 63, minus safety): ~4 dots = 219 chars base32
+//   - 219 base32 chars = 219 * 5 / 8 = 136 bytes raw
+//   - Subtract 4 byte header = 132 bytes max payload
+//
+// For shorter domains, we can fit more data:
+//   - Rust formula: mtu = (240 - domain_len) / 1.6
+//   - For 20-char domain: ~137 bytes
+//
+// Use 132 bytes as default (safe for most domains up to ~30 chars)
+const MaxChunkSize = 132
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
@@ -26,8 +33,9 @@ func init() {
 
 // Reassembler reassembles fragmented packets
 type Reassembler struct {
-	pending map[uint16]*pendingPacket
-	mu      sync.Mutex
+	pending   map[uint16]*pendingPacket
+	completed map[uint16]time.Time // Track recently completed packet IDs to ignore duplicates
+	mu        sync.Mutex
 }
 
 type pendingPacket struct {
@@ -40,7 +48,8 @@ type pendingPacket struct {
 // NewReassembler creates a new Reassembler
 func NewReassembler() *Reassembler {
 	return &Reassembler{
-		pending: make(map[uint16]*pendingPacket),
+		pending:   make(map[uint16]*pendingPacket),
+		completed: make(map[uint16]time.Time),
 	}
 }
 
@@ -58,6 +67,19 @@ func (r *Reassembler) IngestChunk(data []byte) []byte {
 	total := int(data[2])
 	seq := int(data[3])
 	payload := data[4:]
+
+	// Check if this packet was recently completed (ignore duplicate fragments)
+	if _, wasCompleted := r.completed[packetID]; wasCompleted {
+		return nil
+	}
+
+	// Cleanup old completed entries (keep for 30 seconds)
+	now := time.Now()
+	for id, completedAt := range r.completed {
+		if now.Sub(completedAt) > 30*time.Second {
+			delete(r.completed, id)
+		}
+	}
 
 	pkt, exists := r.pending[packetID]
 	if !exists {
@@ -80,6 +102,7 @@ func (r *Reassembler) IngestChunk(data []byte) []byte {
 
 	if pkt.Received == pkt.Total {
 		delete(r.pending, packetID)
+		r.completed[packetID] = now // Mark as completed to ignore future duplicates
 		var full []byte
 		for _, chunk := range pkt.Chunks {
 			full = append(full, chunk...)

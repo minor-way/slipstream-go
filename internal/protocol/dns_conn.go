@@ -16,8 +16,12 @@ const (
 	TxQueueSize  = 2000
 	RxQueueSize  = 2000
 	NumTxWorkers = 4
-	PollInterval = 10 * time.Millisecond // Fast polling for low latency
+	// PollInterval: 50ms matches Rust's DNS_POLL_SLICE_US = 50_000 microseconds
+	// 10ms was too aggressive, causing unnecessary DNS traffic
+	PollInterval = 50 * time.Millisecond
 	WriteTimeout = 5 * time.Second
+	// IdleThreshold: Only poll when truly idle (no recent TX activity)
+	IdleThreshold = 100 * time.Millisecond
 )
 
 type DnsPacketConn struct {
@@ -131,12 +135,16 @@ func (c *DnsPacketConn) startTxEngine() {
 					// Use NoPadding base32 to avoid = characters in DNS labels
 					encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(pkt)
 
-					// Split encoded data into 63-char labels (DNS label limit)
-					dataLabels := splitIntoLabels(encoded, 63)
+					// Split encoded data into 57-char labels (matches Rust implementation)
+					// Using 57 instead of 63 provides safety margin and matches picoquic
+					dataLabels := splitIntoLabels(encoded, 57)
 					qname := dataLabels + suffix
 
 					msg.SetQuestion(qname, dns.TypeTXT)
 					buf, _ := msg.Pack()
+
+					// Send once - QUIC's built-in retransmission handles reliability
+					// Double-sending was causing 2x overhead and congestion
 					c.Conn.WriteToUDP(buf, c.Resolver)
 				case <-c.done:
 					return
@@ -230,9 +238,9 @@ func (c *DnsPacketConn) startPollEngine() {
 		for {
 			select {
 			case <-ticker.C:
-				// Only poll if idle for > 50ms
+				// Only poll if idle (no recent TX activity)
 				c.mu.Lock()
-				idle := time.Since(c.lastTxTime) > 50*time.Millisecond
+				idle := time.Since(c.lastTxTime) > IdleThreshold
 				c.mu.Unlock()
 
 				if idle {
