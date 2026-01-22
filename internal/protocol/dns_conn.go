@@ -4,6 +4,7 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
+	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -278,8 +279,14 @@ func (c *DnsPacketConn) startPollEngine() {
 
 func (c *DnsPacketConn) sendPoll() {
 	// "poll" is a magic keyword for the server
-	// Format: poll.SESSION.DOMAIN. (no leading dot)
-	qname := "poll." + c.SessionID + "." + c.Domain + "."
+	// Format: poll.NONCE.SESSION.DOMAIN. (nonce busts DNS cache)
+	// The random nonce ensures each poll is unique, preventing ISP/resolver
+	// from returning cached responses (which caused 18x duplication)
+	nonce := make([]byte, 4)
+	binary.BigEndian.PutUint32(nonce, rand.Uint32())
+	nonceStr := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(nonce)
+
+	qname := "poll." + nonceStr + "." + c.SessionID + "." + c.Domain + "."
 	msg := new(dns.Msg)
 	msg.SetQuestion(qname, dns.TypeTXT)
 	buf, _ := msg.Pack()

@@ -62,21 +62,14 @@ func (vc *VirtualConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	sess := vc.Sessions.GetOrCreate(sessAddr.SessionID)
 	fragments := protocol.FragmentPacket(p)
 
-	// REDUNDANCY FIX: Apply duplicate sending for large downstream packets (ServerHello)
-	redundancy := 1
-	if len(p) >= 1000 {
-		redundancy = 2
-		log.Debug().Str("sess", sessAddr.SessionID).Int("len", len(p)).Msg("Applying 2x redundancy for large downstream packet")
-	}
-
-	for r := 0; r < redundancy; r++ {
-		for _, frag := range fragments {
-			select {
-			case sess.FragQueue <- frag:
-			default:
-				log.Debug().Str("sess", sessAddr.SessionID).Msg("WriteTo: FragQueue full, dropping fragment")
-				return 0, nil
-			}
+	// No redundancy - DNS cache busting fix handles reliability
+	// QUIC's built-in retransmission handles packet loss
+	for _, frag := range fragments {
+		select {
+		case sess.FragQueue <- frag:
+		default:
+			log.Debug().Str("sess", sessAddr.SessionID).Msg("WriteTo: FragQueue full, dropping fragment")
+			return 0, nil
 		}
 	}
 
