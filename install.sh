@@ -3,6 +3,11 @@
 # Slipstream-Go Quick Installer & Deployer
 # Downloads binaries, configures, and creates systemd service
 #
+# Usage:
+#   Interactive:  ./install.sh
+#   Server:       curl ... | sudo bash -s -- server --domain n.example.com
+#   Client:       curl ... | sudo bash -s -- client --domain n.example.com --resolver 8.8.8.8:53 --pubkey "BASE64KEY"
+#
 
 set -e
 
@@ -11,6 +16,16 @@ REPO="minor-way/slipstream-go"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/slipstream"
 SERVICE_USER="slipstream"
+
+# Default values
+DOMAIN=""
+DNS_PORT="53"
+TARGET_TYPE="direct"
+TARGET_ADDR=""
+MAX_FRAGS="5"
+RESOLVER=""
+LISTEN_ADDR="127.0.0.1:1080"
+PUBKEY=""
 
 # Colors
 RED='\033[0;31m'
@@ -108,7 +123,7 @@ create_user() {
 
 setup_config_dir() {
     mkdir -p "$CONFIG_DIR"
-    chown "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR"
+    chown "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR" 2>/dev/null || true
     chmod 750 "$CONFIG_DIR"
 }
 
@@ -119,7 +134,7 @@ generate_keys() {
         --privkey-file "${CONFIG_DIR}/server.key" \
         --pubkey-file "${CONFIG_DIR}/server.pub"
 
-    chown "$SERVICE_USER:$SERVICE_USER" "${CONFIG_DIR}/server.key" "${CONFIG_DIR}/server.pub"
+    chown "$SERVICE_USER:$SERVICE_USER" "${CONFIG_DIR}/server.key" "${CONFIG_DIR}/server.pub" 2>/dev/null || true
     chmod 600 "${CONFIG_DIR}/server.key"
     chmod 644 "${CONFIG_DIR}/server.pub"
 
@@ -127,49 +142,26 @@ generate_keys() {
 }
 
 deploy_server() {
+    # Validate required params
+    if [[ -z "$DOMAIN" ]]; then
+        print_error "Domain NS record is required (--domain)"
+        echo ""
+        echo "Usage: curl ... | sudo bash -s -- server --domain n.example.com [options]"
+        echo ""
+        echo "Options:"
+        echo "  --domain DOMAIN      Domain NS record (required)"
+        echo "  --port PORT          DNS port (default: 53)"
+        echo "  --target-type TYPE   direct or socks5 (default: direct)"
+        echo "  --target ADDR        Upstream SOCKS5 address (required if target-type=socks5)"
+        echo "  --max-frags NUM      Max fragments per response (default: 5)"
+        exit 1
+    fi
+
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}                    Server Configuration                    ${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo ""
-
-    # Domain
-    echo -e "${BLUE}Enter domain NS record (e.g., n.example.com):${NC}"
-    read -r DOMAIN < /dev/tty
-    if [[ -z "$DOMAIN" ]]; then
-        print_error "Domain NS record is required"
-        exit 1
-    fi
-
-    # DNS Port
-    echo -e "${BLUE}Enter DNS server port [default: 53]:${NC}"
-    read -r DNS_PORT < /dev/tty
-    DNS_PORT=${DNS_PORT:-53}
-
-    # Target Type
-    echo -e "${BLUE}Select target type:${NC}"
-    echo "  1) direct - Connect directly to targets (default)"
-    echo "  2) socks5 - Route through upstream SOCKS5 proxy"
-    read -r TARGET_CHOICE < /dev/tty
-
-    TARGET_TYPE="direct"
-    TARGET_ADDR=""
-    case $TARGET_CHOICE in
-        2|socks5)
-            TARGET_TYPE="socks5"
-            echo -e "${BLUE}Enter upstream SOCKS5 address (e.g., 127.0.0.1:7020):${NC}"
-            read -r TARGET_ADDR < /dev/tty
-            if [[ -z "$TARGET_ADDR" ]]; then
-                print_error "SOCKS5 address is required"
-                exit 1
-            fi
-            ;;
-    esac
-
-    # Max fragments
-    echo -e "${BLUE}Enter max fragments per DNS response [default: 5]:${NC}"
-    read -r MAX_FRAGS < /dev/tty
-    MAX_FRAGS=${MAX_FRAGS:-5}
 
     # Generate keys
     generate_keys
@@ -249,40 +241,35 @@ EOF
 }
 
 deploy_client() {
+    # Validate required params
+    if [[ -z "$DOMAIN" ]]; then
+        print_error "Domain NS record is required (--domain)"
+        echo ""
+        echo "Usage: curl ... | sudo bash -s -- client --domain n.example.com --resolver IP:PORT --pubkey \"KEY\" [options]"
+        echo ""
+        echo "Options:"
+        echo "  --domain DOMAIN      Domain NS record (required)"
+        echo "  --resolver ADDR      DNS resolver address (required)"
+        echo "  --pubkey KEY         Server public key base64 (required)"
+        echo "  --listen ADDR        Local SOCKS5 address (default: 127.0.0.1:1080)"
+        exit 1
+    fi
+
+    if [[ -z "$RESOLVER" ]]; then
+        print_error "DNS resolver is required (--resolver)"
+        exit 1
+    fi
+
+    if [[ -z "$PUBKEY" ]]; then
+        print_error "Server public key is required (--pubkey)"
+        exit 1
+    fi
+
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}                    Client Configuration                    ${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo ""
-
-    # Domain
-    echo -e "${BLUE}Enter domain NS record (e.g., n.example.com):${NC}"
-    read -r DOMAIN < /dev/tty
-    if [[ -z "$DOMAIN" ]]; then
-        print_error "Domain NS record is required"
-        exit 1
-    fi
-
-    # Resolver
-    echo -e "${BLUE}Enter DNS resolver address (e.g., 8.8.8.8:53):${NC}"
-    read -r RESOLVER < /dev/tty
-    if [[ -z "$RESOLVER" ]]; then
-        print_error "Resolver is required"
-        exit 1
-    fi
-
-    # Listen address
-    echo -e "${BLUE}Enter local SOCKS5 listen address [default: 127.0.0.1:1080]:${NC}"
-    read -r LISTEN_ADDR < /dev/tty
-    LISTEN_ADDR=${LISTEN_ADDR:-127.0.0.1:1080}
-
-    # Public key
-    echo -e "${BLUE}Enter server public key (base64 string from server):${NC}"
-    read -r PUBKEY < /dev/tty
-    if [[ -z "$PUBKEY" ]]; then
-        print_error "Public key is required"
-        exit 1
-    fi
 
     # Save public key
     setup_config_dir
@@ -351,14 +338,7 @@ EOF
 
 uninstall() {
     echo ""
-    print_warning "This will remove Slipstream-Go completely"
-    echo -e "${BLUE}Continue? [y/N]:${NC}"
-    read -r CONFIRM < /dev/tty
-
-    if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-        echo "Cancelled"
-        exit 0
-    fi
+    print_warning "Removing Slipstream-Go..."
 
     # Stop and disable services
     systemctl stop slipstream-server 2>/dev/null || true
@@ -382,48 +362,95 @@ uninstall() {
 }
 
 show_help() {
-    echo "Usage: $0 [command]"
+    echo "Slipstream-Go Installer"
+    echo ""
+    echo "Usage:"
+    echo "  Server: curl -Ls https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo bash -s -- server --domain DOMAIN [options]"
+    echo "  Client: curl -Ls https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo bash -s -- client --domain DOMAIN --resolver ADDR --pubkey KEY [options]"
     echo ""
     echo "Commands:"
-    echo "  server      Install and configure as DNS tunnel server"
-    echo "  client      Install and configure as DNS tunnel client"
-    echo "  uninstall   Remove Slipstream-Go completely"
-    echo "  help        Show this help message"
+    echo "  server      Install DNS tunnel server"
+    echo "  client      Install DNS tunnel client"
+    echo "  uninstall   Remove Slipstream-Go"
+    echo "  help        Show this help"
+    echo ""
+    echo "Server Options:"
+    echo "  --domain DOMAIN      Domain NS record (required)"
+    echo "  --port PORT          DNS port (default: 53)"
+    echo "  --target-type TYPE   direct or socks5 (default: direct)"
+    echo "  --target ADDR        Upstream SOCKS5 address"
+    echo "  --max-frags NUM      Max fragments (default: 5)"
+    echo ""
+    echo "Client Options:"
+    echo "  --domain DOMAIN      Domain NS record (required)"
+    echo "  --resolver ADDR      DNS resolver IP:PORT (required)"
+    echo "  --pubkey KEY         Server public key base64 (required)"
+    echo "  --listen ADDR        Local SOCKS5 address (default: 127.0.0.1:1080)"
     echo ""
     echo "Examples:"
-    echo "  sudo bash install.sh           # Interactive menu"
-    echo "  sudo bash install.sh server    # Direct server install"
-    echo "  sudo bash install.sh client    # Direct client install"
+    echo "  # Install server"
+    echo "  curl -Ls .../install.sh | sudo bash -s -- server --domain n.example.com"
     echo ""
-    echo "One-liner install:"
-    echo "  bash <(curl -Ls https://raw.githubusercontent.com/${REPO}/main/install.sh)"
+    echo "  # Install server with SOCKS5 upstream"
+    echo "  curl -Ls .../install.sh | sudo bash -s -- server --domain n.example.com --target-type socks5 --target 127.0.0.1:7020"
+    echo ""
+    echo "  # Install client"
+    echo "  curl -Ls .../install.sh | sudo bash -s -- client --domain n.example.com --resolver 8.8.8.8:53 --pubkey \"BASE64KEY\""
 }
 
-main_menu() {
-    echo ""
-    echo "Select installation type:"
-    echo ""
-    echo "  1) Server - DNS tunnel server (has internet access)"
-    echo "  2) Client - DNS tunnel client (connects through server)"
-    echo "  3) Uninstall"
-    echo "  4) Exit"
-    echo ""
-    echo -n "Choice [1-4]: "
-    read -r CHOICE < /dev/tty
-
-    case $CHOICE in
-        1) deploy_server ;;
-        2) deploy_client ;;
-        3) uninstall ;;
-        4) exit 0 ;;
-        *) print_error "Invalid choice"; exit 1 ;;
-    esac
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --domain)
+                DOMAIN="$2"
+                shift 2
+                ;;
+            --port)
+                DNS_PORT="$2"
+                shift 2
+                ;;
+            --target-type)
+                TARGET_TYPE="$2"
+                shift 2
+                ;;
+            --target)
+                TARGET_ADDR="$2"
+                shift 2
+                ;;
+            --max-frags)
+                MAX_FRAGS="$2"
+                shift 2
+                ;;
+            --resolver)
+                RESOLVER="$2"
+                shift 2
+                ;;
+            --listen)
+                LISTEN_ADDR="$2"
+                shift 2
+                ;;
+            --pubkey)
+                PUBKEY="$2"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
 }
 
 # Main
 print_banner
 
-case "${1:-}" in
+# Get command
+CMD="${1:-}"
+shift 2>/dev/null || true
+
+# Parse remaining args
+parse_args "$@"
+
+case "$CMD" in
     server)
         check_root
         detect_platform
@@ -448,11 +475,7 @@ case "${1:-}" in
         show_help
         ;;
     *)
-        check_root
-        detect_platform
-        download_binaries
-        create_user
-        setup_config_dir
-        main_menu
+        show_help
+        exit 1
         ;;
 esac
