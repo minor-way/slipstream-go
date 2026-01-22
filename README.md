@@ -147,8 +147,8 @@ Download from [Releases](https://github.com/minor-way/slipstream-go/releases/lat
 
 ```bash
 # Example for Linux amd64
-curl -LO https://github.com/minor-way/slipstream-go/releases/download/v1.1.0/slipstream-v1.1.0-linux-amd64.tar.gz
-tar -xzf slipstream-v1.1.0-linux-amd64.tar.gz
+curl -LO https://github.com/minor-way/slipstream-go/releases/download/v1.1.1/slipstream-v1.1.1-linux-amd64.tar.gz
+tar -xzf slipstream-v1.1.1-linux-amd64.tar.gz
 chmod +x slipstream-server slipstream-client
 ```
 
