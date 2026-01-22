@@ -134,23 +134,23 @@ deploy_server() {
     echo ""
 
     # Domain
-    echo -e "${BLUE}Enter tunnel domain (e.g., tunnel.example.com):${NC}"
-    read -r DOMAIN
+    echo -e "${BLUE}Enter domain NS record (e.g., n.example.com):${NC}"
+    read -r DOMAIN < /dev/tty
     if [[ -z "$DOMAIN" ]]; then
-        print_error "Domain is required"
+        print_error "Domain NS record is required"
         exit 1
     fi
 
     # DNS Port
     echo -e "${BLUE}Enter DNS server port [default: 53]:${NC}"
-    read -r DNS_PORT
+    read -r DNS_PORT < /dev/tty
     DNS_PORT=${DNS_PORT:-53}
 
     # Target Type
     echo -e "${BLUE}Select target type:${NC}"
     echo "  1) direct - Connect directly to targets (default)"
     echo "  2) socks5 - Route through upstream SOCKS5 proxy"
-    read -r TARGET_CHOICE
+    read -r TARGET_CHOICE < /dev/tty
 
     TARGET_TYPE="direct"
     TARGET_ADDR=""
@@ -158,7 +158,7 @@ deploy_server() {
         2|socks5)
             TARGET_TYPE="socks5"
             echo -e "${BLUE}Enter upstream SOCKS5 address (e.g., 127.0.0.1:7020):${NC}"
-            read -r TARGET_ADDR
+            read -r TARGET_ADDR < /dev/tty
             if [[ -z "$TARGET_ADDR" ]]; then
                 print_error "SOCKS5 address is required"
                 exit 1
@@ -168,7 +168,7 @@ deploy_server() {
 
     # Max fragments
     echo -e "${BLUE}Enter max fragments per DNS response [default: 5]:${NC}"
-    read -r MAX_FRAGS
+    read -r MAX_FRAGS < /dev/tty
     MAX_FRAGS=${MAX_FRAGS:-5}
 
     # Generate keys
@@ -256,16 +256,16 @@ deploy_client() {
     echo ""
 
     # Domain
-    echo -e "${BLUE}Enter tunnel domain (e.g., tunnel.example.com):${NC}"
-    read -r DOMAIN
+    echo -e "${BLUE}Enter domain NS record (e.g., n.example.com):${NC}"
+    read -r DOMAIN < /dev/tty
     if [[ -z "$DOMAIN" ]]; then
-        print_error "Domain is required"
+        print_error "Domain NS record is required"
         exit 1
     fi
 
     # Resolver
     echo -e "${BLUE}Enter DNS resolver address (e.g., 8.8.8.8:53):${NC}"
-    read -r RESOLVER
+    read -r RESOLVER < /dev/tty
     if [[ -z "$RESOLVER" ]]; then
         print_error "Resolver is required"
         exit 1
@@ -273,12 +273,12 @@ deploy_client() {
 
     # Listen address
     echo -e "${BLUE}Enter local SOCKS5 listen address [default: 127.0.0.1:1080]:${NC}"
-    read -r LISTEN_ADDR
+    read -r LISTEN_ADDR < /dev/tty
     LISTEN_ADDR=${LISTEN_ADDR:-127.0.0.1:1080}
 
     # Public key
     echo -e "${BLUE}Enter server public key (base64 string from server):${NC}"
-    read -r PUBKEY
+    read -r PUBKEY < /dev/tty
     if [[ -z "$PUBKEY" ]]; then
         print_error "Public key is required"
         exit 1
@@ -353,7 +353,7 @@ uninstall() {
     echo ""
     print_warning "This will remove Slipstream-Go completely"
     echo -e "${BLUE}Continue? [y/N]:${NC}"
-    read -r CONFIRM
+    read -r CONFIRM < /dev/tty
 
     if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
         echo "Cancelled"
@@ -409,7 +409,7 @@ main_menu() {
     echo "  4) Exit"
     echo ""
     echo -n "Choice [1-4]: "
-    read -r CHOICE
+    read -r CHOICE < /dev/tty
 
     case $CHOICE in
         1) deploy_server ;;
