@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go" alt="Go Version" />
+  <img src="https://img.shields.io/badge/Go-1.25+-informational" alt="Go Version" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue" alt="Platform" />
   <img src="https://img.shields.io/github/stars/minor-way/slipstream-go?style=social" alt="Stars" />
