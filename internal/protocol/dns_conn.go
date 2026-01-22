@@ -93,16 +93,27 @@ func (c *DnsPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	// 1. Fragment Logic
 	fragments := FragmentPacket(p)
 
-	// 2. Queue Fragments
-	for _, frag := range fragments {
-		select {
-		case c.txQueue <- frag:
-		case <-time.After(WriteTimeout):
-			// Backpressure: If queue full, block then drop
-			log.Warn().Msg("TX Queue Full - Drop")
-			return 0, nil // Return nil so QUIC doesn't crash, just retransmits
-		case <-c.done:
-			return 0, net.ErrClosed
+	// 2. Determine redundancy level based on packet size
+	// Large packets (1200+ bytes) are likely Initial/Handshake packets
+	// These need higher redundancy because losing any fragment loses the whole packet
+	// Small packets (post-handshake) can rely more on QUIC retransmission
+	redundancy := 1
+	if len(p) >= 1000 {
+		redundancy = 2 // Send twice for large packets (handshake)
+	}
+
+	// 3. Queue Fragments with redundancy
+	for r := 0; r < redundancy; r++ {
+		for _, frag := range fragments {
+			select {
+			case c.txQueue <- frag:
+			case <-time.After(WriteTimeout):
+				// Backpressure: If queue full, block then drop
+				log.Warn().Msg("TX Queue Full - Drop")
+				return 0, nil // Return nil so QUIC doesn't crash, just retransmits
+			case <-c.done:
+				return 0, net.ErrClosed
+			}
 		}
 	}
 	return len(p), nil
