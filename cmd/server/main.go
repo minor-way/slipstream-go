@@ -45,6 +45,7 @@ func main() {
 	genKey := flag.Bool("gen-key", false, "Generate keys and exit")
 	logLevel := flag.String("log-level", "info", "Log level: debug/info/warn/error")
 	memoryLimit := flag.Int("memory-limit", 400, "Memory limit in MB")
+	maxFrags := flag.Int("max-frags", 5, "Max fragments per DNS response (1-10)")
 
 	flag.Parse()
 
@@ -138,9 +139,10 @@ func main() {
 
 	// Create DNS handler with allowed domains
 	dnsHandler := &server.DNSHandler{
-		Sessions:       sessionMgr,
-		Injector:       virtualConn,
-		AllowedDomains: allowedDomains,
+		Sessions:            sessionMgr,
+		Injector:            virtualConn,
+		AllowedDomains:      allowedDomains,
+		MaxFragsPerResponse: *maxFrags,
 	}
 
 	// Start DNS server

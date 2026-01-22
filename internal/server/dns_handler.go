@@ -16,6 +16,8 @@ type DNSHandler struct {
 	Injector *VirtualConn
 	// AllowedDomains contains the list of registered tunnel domains
 	AllowedDomains map[string]bool
+	// MaxFragsPerResponse is the max number of fragments to pack per DNS response
+	MaxFragsPerResponse int
 }
 
 func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
@@ -107,13 +109,16 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	msg.SetReply(r)
 	msg.Compress = true
 
-	// DNS UDP safe limit is ~450 bytes for response data
-	// Each base64-encoded fragment is ~165 bytes, so fit 2-3 per response
-	maxFragsPerResponse := 3
+	// Pack multiple fragments per response (configurable via --max-frags)
+	// Each base64-encoded fragment is ~165 bytes
+	maxFrags := h.MaxFragsPerResponse
+	if maxFrags <= 0 {
+		maxFrags = 5 // default
+	}
 	fragsSent := 0
 
 	// Send fragments from queue until limit reached
-	for fragsSent < maxFragsPerResponse {
+	for fragsSent < maxFrags {
 		select {
 		case frag := <-sess.FragQueue:
 			encoded := base64.StdEncoding.EncodeToString(frag)
