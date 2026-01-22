@@ -71,8 +71,9 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	// Session is right before domain (at index len - domainLabelCount - 1)
+	// Normalize to lowercase since DNS is case-insensitive
 	sessionIdx := len(labels) - domainLabelCount - 1
-	sessionID := labels[sessionIdx]
+	sessionID := strings.ToLower(labels[sessionIdx])
 
 	// Data labels are everything before session
 	dataLabels := labels[:sessionIdx]
@@ -82,7 +83,8 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// 1. INGEST UPSTREAM (Reassembly)
 	// If it's not a "poll" query, it contains data chunks
-	if !strings.HasPrefix(dataLabel, "poll") {
+	// Note: dataLabel is case-preserved for base32, but poll check should be case-insensitive
+	if !strings.HasPrefix(strings.ToLower(dataLabel), "poll") {
 		// DNS labels are often lowercased by resolvers.
 		// Standard Base32 requires Uppercase. Fix it here:
 		normalizedData := strings.ToUpper(dataLabel)

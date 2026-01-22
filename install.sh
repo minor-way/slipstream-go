@@ -17,7 +17,7 @@ else
     cp "$0" "$SCRIPT_CONTENT_FILE" 2>/dev/null || SCRIPT_CONTENT_FILE=""
 fi
 
-VERSION="v1.1.1"
+VERSION="v1.1.2"
 REPO="minor-way/slipstream-go"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/slipstream"
