@@ -99,13 +99,7 @@ detect_platform() {
 }
 
 download_binaries() {
-    # Check if already installed in system path
-    if [ -f "${INSTALL_DIR}/slipstream-server" ] || [ -f "${INSTALL_DIR}/slipstream-client" ]; then
-        print_success "Binaries already installed in ${INSTALL_DIR}/"
-        return 0
-    fi
-
-    # Check for local binaries (extracted in current directory)
+    # Check for local binaries first (for offline installation)
     local local_server="slipstream-server-${OS}-${ARCH}"
     local local_client="slipstream-client-${OS}-${ARCH}"
 
