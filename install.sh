@@ -555,11 +555,20 @@ if [ "$0" != "$SCRIPT_INSTALL_PATH" ]; then
 
     print_success "Installation complete!"
     echo ""
-    print_info "Starting configuration menu..."
-    echo ""
 
-    # Execute installed script with /dev/tty for interactive input
-    exec "$SCRIPT_INSTALL_PATH" < /dev/tty
+    # Try to run interactively if TTY is available
+    if [ -e /dev/tty ]; then
+        print_info "Starting configuration menu..."
+        echo ""
+        exec "$SCRIPT_INSTALL_PATH" < /dev/tty
+    else
+        # No TTY (e.g., running via automated SSH)
+        echo -e "${CYAN}To configure Slipstream, run:${NC}"
+        echo ""
+        echo -e "  ${YELLOW}sudo slipstream-deploy${NC}"
+        echo ""
+    fi
+    exit 0
 fi
 
 # Running from installed location - show menu
