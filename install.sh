@@ -12,7 +12,7 @@ INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/slipstream"
 SERVICE_USER="slipstream"
 SCRIPT_INSTALL_PATH="/usr/local/bin/slipstream-deploy"
-SCRIPT_URL="https://raw.githubusercontent.com/${REPO}/main/install.sh"
+SCRIPT_URL="https://cdn.jsdelivr.net/gh/${REPO}@main/install.sh"
 
 # Colors
 RED='\033[0;31m'
