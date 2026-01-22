@@ -26,32 +26,37 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	// Format: [DATA-LABELS...].[SESSION].[DOMAIN]
-	// Example: AAAA.BBBB.sess123.tunnel.local.
+	// Example: AAAA.BBBB.sess123.n.godevgo.ir.
 	// Data may span multiple labels (each up to 63 chars)
+	// Domain can have variable number of parts (e.g., "n.godevgo.ir" = 3 parts)
 	qName := r.Question[0].Name
 	labels := dns.SplitDomainName(qName)
 	if len(labels) < 3 {
 		return
 	}
 
-	// Find session ID - it's followed by domain parts
-	// Domain is typically 2 parts (e.g., "tunnel.local"), so session is at len-2
-	// But we need to handle variable domain lengths. Session ID is always after data labels.
-	// Convention: session ID is alphanumeric 8 chars, followed by domain
-	// For simplicity, we assume: all labels before the last 2 (domain) except data are session
-	// Actually, let's use a simpler approach: session is second-to-last before domain
-	// labels[-3] = session, labels[-2] = tunnel, labels[-1] = local
+	// Find matching domain by checking suffix against allowed domains
+	// Domain can have 2+ parts (e.g., "tunnel.local" or "n.godevgo.ir")
+	var matchedDomain string
+	var domainLabelCount int
 
-	// Extract session ID (assuming domain has 2 parts like "tunnel.local")
-	if len(labels) < 4 {
-		// Minimum: data.session.tunnel.local = 4 labels
-		return
+	qNameLower := strings.ToLower(qName)
+	for domain := range h.AllowedDomains {
+		domainWithDot := strings.ToLower(domain) + "."
+		if strings.HasSuffix(qNameLower, "."+domainWithDot) || qNameLower == domainWithDot {
+			matchedDomain = domain
+			domainLabelCount = len(dns.SplitDomainName(domain))
+			break
+		}
 	}
 
-	// Extract and validate domain (last 2 labels, e.g., "tunnel.local")
-	domain := strings.ToLower(labels[len(labels)-2] + "." + labels[len(labels)-1])
-	if h.AllowedDomains != nil && !h.AllowedDomains[domain] {
-		log.Warn().Str("domain", domain).Str("query", qName).Msg("Rejected query for unregistered domain")
+	if matchedDomain == "" {
+		// Extract domain for logging (try last 2-3 labels)
+		var domainForLog string
+		if len(labels) >= 2 {
+			domainForLog = strings.ToLower(labels[len(labels)-2] + "." + labels[len(labels)-1])
+		}
+		log.Warn().Str("domain", domainForLog).Str("query", qName).Msg("Rejected query for unregistered domain")
 		// Send REFUSED response
 		msg := new(dns.Msg)
 		msg.SetRcode(r, dns.RcodeRefused)
@@ -59,11 +64,18 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
-	// Session is at index len-3 (third from last)
-	sessionID := labels[len(labels)-3]
+	// Minimum labels: data + session + domain parts
+	minLabels := 2 + domainLabelCount
+	if len(labels) < minLabels {
+		return
+	}
+
+	// Session is right before domain (at index len - domainLabelCount - 1)
+	sessionIdx := len(labels) - domainLabelCount - 1
+	sessionID := labels[sessionIdx]
 
 	// Data labels are everything before session
-	dataLabels := labels[:len(labels)-3]
+	dataLabels := labels[:sessionIdx]
 	dataLabel := strings.Join(dataLabels, "")
 
 	sess := h.Sessions.GetOrCreate(sessionID)
