@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/binary"
 	"net"
 	"strings"
 	"sync"
@@ -219,7 +220,15 @@ func (c *DnsPacketConn) startRxEngine() {
 
 					if len(raw) > 0 {
 						gotData = true
-						log.Debug().Int("rawLen", len(raw)).Msg("Received fragment from server")
+						// Log fragment header details for debugging
+						if len(raw) >= 4 {
+							pktID := binary.BigEndian.Uint16(raw[0:2])
+							total := raw[2]
+							seq := raw[3]
+							log.Debug().Uint16("pktID", pktID).Uint8("total", total).Uint8("seq", seq).Int("rawLen", len(raw)).Msg("Received fragment from server")
+						} else {
+							log.Debug().Int("rawLen", len(raw)).Msg("Received short fragment from server")
+						}
 						// Reassemble fragments into full packets
 						if fullPacket := c.reassembler.IngestChunk(raw); fullPacket != nil {
 							log.Debug().Int("pktLen", len(fullPacket)).Msg("Reassembled full packet")

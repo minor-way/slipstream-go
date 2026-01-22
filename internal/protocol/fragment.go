@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Header: [PacketID:2][TotalChunks:1][SeqNum:1] = 4 Bytes
@@ -55,7 +57,9 @@ func NewReassembler() *Reassembler {
 
 // IngestChunk processes a fragment and returns the full packet if complete
 func (r *Reassembler) IngestChunk(data []byte) []byte {
+	log.Debug().Int("dataLen", len(data)).Msg("Reassembler.IngestChunk called")
 	if len(data) < FragHeaderLen {
+		log.Debug().Msg("Reassembler: data too short")
 		return nil
 	}
 
@@ -70,6 +74,8 @@ func (r *Reassembler) IngestChunk(data []byte) []byte {
 
 	// Check if this packet was recently completed (ignore duplicate fragments)
 	if _, wasCompleted := r.completed[packetID]; wasCompleted {
+		// Debug: log that we're ignoring duplicate
+		// log.Debug().Uint16("pktID", packetID).Msg("Ignoring duplicate fragment (already completed)")
 		return nil
 	}
 
@@ -107,8 +113,10 @@ func (r *Reassembler) IngestChunk(data []byte) []byte {
 		for _, chunk := range pkt.Chunks {
 			full = append(full, chunk...)
 		}
+		log.Debug().Uint16("pktID", packetID).Int("total", total).Int("fullLen", len(full)).Msg("Reassembler: packet complete")
 		return full
 	}
+	log.Debug().Uint16("pktID", packetID).Int("seq", seq).Int("total", total).Int("received", pkt.Received).Msg("Reassembler: fragment stored, waiting for more")
 	return nil
 }
 
