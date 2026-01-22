@@ -553,18 +553,13 @@ if [ "$0" != "$SCRIPT_INSTALL_PATH" ]; then
     setup_config_dir
     install_script
 
+    print_success "Installation complete!"
     echo ""
-    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║              Installation Complete!                       ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
+    print_info "Starting configuration menu..."
     echo ""
-    echo -e "${CYAN}To configure Slipstream, run:${NC}"
-    echo ""
-    echo -e "  ${YELLOW}sudo slipstream-deploy${NC}"
-    echo ""
-    echo -e "${CYAN}This will show an interactive menu to set up server or client.${NC}"
-    echo ""
-    exit 0
+
+    # Execute installed script with /dev/tty for interactive input
+    exec "$SCRIPT_INSTALL_PATH" < /dev/tty
 fi
 
 # Running from installed location - show menu
