@@ -3,11 +3,6 @@
 # Slipstream-Go Quick Installer & Deployer
 # Downloads binaries, configures, and creates systemd service
 #
-# Usage:
-#   Interactive:  ./install.sh
-#   Server:       curl ... | sudo bash -s -- server --domain n.example.com
-#   Client:       curl ... | sudo bash -s -- client --domain n.example.com --resolver 8.8.8.8:53 --pubkey "BASE64KEY"
-#
 
 set -e
 
@@ -16,16 +11,8 @@ REPO="minor-way/slipstream-go"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/slipstream"
 SERVICE_USER="slipstream"
-
-# Default values
-DOMAIN=""
-DNS_PORT="53"
-TARGET_TYPE="direct"
-TARGET_ADDR=""
-MAX_FRAGS="5"
-RESOLVER=""
-LISTEN_ADDR="127.0.0.1:1080"
-PUBKEY=""
+SCRIPT_INSTALL_PATH="/usr/local/bin/slipstream-deploy"
+SCRIPT_URL="https://raw.githubusercontent.com/${REPO}/main/install.sh"
 
 # Colors
 RED='\033[0;31m'
@@ -48,12 +35,27 @@ print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_error() { echo -e "${RED}[✗]${NC} $1"; }
 print_info() { echo -e "${BLUE}[i]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
+print_question() { echo -ne "${BLUE}[?]${NC} $1"; }
 
 check_root() {
     if [ "$EUID" -ne 0 ]; then
         print_error "This script must be run as root (use sudo)"
         exit 1
     fi
+}
+
+# Install the script itself to /usr/local/bin
+install_script() {
+    print_info "Installing slipstream-deploy script..."
+
+    local temp_script="/tmp/slipstream-deploy-new.sh"
+    curl -Ls "$SCRIPT_URL" -o "$temp_script"
+    chmod +x "$temp_script"
+    cp "$temp_script" "$SCRIPT_INSTALL_PATH"
+    rm "$temp_script"
+
+    print_success "Script installed to $SCRIPT_INSTALL_PATH"
+    print_info "You can now run 'slipstream-deploy' from anywhere"
 }
 
 detect_platform() {
@@ -64,7 +66,7 @@ detect_platform() {
         linux*)  OS="linux" ;;
         darwin*) OS="darwin" ;;
         *)
-            print_error "Unsupported OS: $OS (only Linux is supported for service installation)"
+            print_error "Unsupported OS: $OS (only Linux supported for service installation)"
             exit 1
             ;;
     esac
@@ -82,6 +84,12 @@ detect_platform() {
 }
 
 download_binaries() {
+    # Check if already installed
+    if [ -f "${INSTALL_DIR}/slipstream-server" ] && [ -f "${INSTALL_DIR}/slipstream-client" ]; then
+        print_success "Binaries already installed in ${INSTALL_DIR}/"
+        return 0
+    fi
+
     print_info "Downloading Slipstream-Go ${VERSION}..."
 
     ARCHIVE="slipstream-${VERSION}-${OS}-${ARCH}.tar.gz"
@@ -128,6 +136,11 @@ setup_config_dir() {
 }
 
 generate_keys() {
+    if [ -f "${CONFIG_DIR}/server.key" ] && [ -f "${CONFIG_DIR}/server.pub" ]; then
+        print_success "Keys already exist in ${CONFIG_DIR}/"
+        return 0
+    fi
+
     print_info "Generating Ed25519 key pair..."
 
     "${INSTALL_DIR}/slipstream-server" --gen-key \
@@ -141,28 +154,65 @@ generate_keys() {
     print_success "Keys generated in ${CONFIG_DIR}/"
 }
 
-deploy_server() {
-    # Validate required params
-    if [[ -z "$DOMAIN" ]]; then
-        print_error "Domain NS record is required (--domain)"
-        echo ""
-        echo "Usage: curl ... | sudo bash -s -- server --domain n.example.com [options]"
-        echo ""
-        echo "Options:"
-        echo "  --domain DOMAIN      Domain NS record (required)"
-        echo "  --port PORT          DNS port (default: 53)"
-        echo "  --target-type TYPE   direct or socks5 (default: direct)"
-        echo "  --target ADDR        Upstream SOCKS5 address (required if target-type=socks5)"
-        echo "  --max-frags NUM      Max fragments per response (default: 5)"
-        exit 1
-    fi
-
+get_server_input() {
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}                    Server Configuration                    ${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo ""
 
+    # Domain NS record
+    while true; do
+        print_question "Enter domain NS record (e.g., n.example.com): "
+        read -r DOMAIN
+        if [[ -n "$DOMAIN" ]]; then
+            break
+        else
+            print_error "Domain NS record is required"
+        fi
+    done
+
+    # DNS Port
+    print_question "Enter DNS server port [default: 53]: "
+    read -r DNS_PORT
+    DNS_PORT=${DNS_PORT:-53}
+
+    # Target Type
+    echo ""
+    echo "Select target type:"
+    echo "  1) direct - Connect directly to targets (default)"
+    echo "  2) socks5 - Route through upstream SOCKS5 proxy"
+    print_question "Enter choice (1 or 2): "
+    read -r TARGET_CHOICE
+
+    TARGET_TYPE="direct"
+    TARGET_ADDR=""
+    case $TARGET_CHOICE in
+        2|socks5)
+            TARGET_TYPE="socks5"
+            print_question "Enter upstream SOCKS5 address (e.g., 127.0.0.1:7020): "
+            read -r TARGET_ADDR
+            if [[ -z "$TARGET_ADDR" ]]; then
+                print_error "SOCKS5 address is required"
+                exit 1
+            fi
+            ;;
+    esac
+
+    # Max fragments
+    print_question "Enter max fragments per DNS response [default: 5]: "
+    read -r MAX_FRAGS
+    MAX_FRAGS=${MAX_FRAGS:-5}
+
+    print_info "Configuration:"
+    print_info "  Domain NS record: $DOMAIN"
+    print_info "  DNS Port: $DNS_PORT"
+    print_info "  Target Type: $TARGET_TYPE"
+    [[ -n "$TARGET_ADDR" ]] && print_info "  Target: $TARGET_ADDR"
+    print_info "  Max Frags: $MAX_FRAGS"
+}
+
+deploy_server() {
     # Generate keys
     generate_keys
 
@@ -240,37 +290,58 @@ EOF
     echo ""
 }
 
-deploy_client() {
-    # Validate required params
-    if [[ -z "$DOMAIN" ]]; then
-        print_error "Domain NS record is required (--domain)"
-        echo ""
-        echo "Usage: curl ... | sudo bash -s -- client --domain n.example.com --resolver IP:PORT --pubkey \"KEY\" [options]"
-        echo ""
-        echo "Options:"
-        echo "  --domain DOMAIN      Domain NS record (required)"
-        echo "  --resolver ADDR      DNS resolver address (required)"
-        echo "  --pubkey KEY         Server public key base64 (required)"
-        echo "  --listen ADDR        Local SOCKS5 address (default: 127.0.0.1:1080)"
-        exit 1
-    fi
-
-    if [[ -z "$RESOLVER" ]]; then
-        print_error "DNS resolver is required (--resolver)"
-        exit 1
-    fi
-
-    if [[ -z "$PUBKEY" ]]; then
-        print_error "Server public key is required (--pubkey)"
-        exit 1
-    fi
-
+get_client_input() {
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}                    Client Configuration                    ${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
     echo ""
 
+    # Domain NS record
+    while true; do
+        print_question "Enter domain NS record (e.g., n.example.com): "
+        read -r DOMAIN
+        if [[ -n "$DOMAIN" ]]; then
+            break
+        else
+            print_error "Domain NS record is required"
+        fi
+    done
+
+    # Resolver
+    while true; do
+        print_question "Enter DNS resolver address (e.g., 8.8.8.8:53): "
+        read -r RESOLVER
+        if [[ -n "$RESOLVER" ]]; then
+            break
+        else
+            print_error "DNS resolver is required"
+        fi
+    done
+
+    # Listen address
+    print_question "Enter local SOCKS5 listen address [default: 127.0.0.1:1080]: "
+    read -r LISTEN_ADDR
+    LISTEN_ADDR=${LISTEN_ADDR:-127.0.0.1:1080}
+
+    # Public key
+    while true; do
+        print_question "Enter server public key (base64 string from server): "
+        read -r PUBKEY
+        if [[ -n "$PUBKEY" ]]; then
+            break
+        else
+            print_error "Server public key is required"
+        fi
+    done
+
+    print_info "Configuration:"
+    print_info "  Domain NS record: $DOMAIN"
+    print_info "  Resolver: $RESOLVER"
+    print_info "  Listen: $LISTEN_ADDR"
+}
+
+deploy_client() {
     # Save public key
     setup_config_dir
     echo "$PUBKEY" > "${CONFIG_DIR}/server.pub"
@@ -336,9 +407,39 @@ EOF
     echo ""
 }
 
+show_config_info() {
+    print_info "Current Configuration"
+    echo ""
+
+    if [ -f "${CONFIG_DIR}/server.pub" ]; then
+        echo -e "${CYAN}Public Key:${NC}"
+        echo -e "${YELLOW}$(cat ${CONFIG_DIR}/server.pub)${NC}"
+        echo ""
+    fi
+
+    if systemctl is-active --quiet slipstream-server; then
+        echo -e "${CYAN}Server Status:${NC} ${GREEN}Running${NC}"
+        systemctl status slipstream-server --no-pager -l 2>/dev/null | head -10
+    elif systemctl is-active --quiet slipstream-client; then
+        echo -e "${CYAN}Client Status:${NC} ${GREEN}Running${NC}"
+        systemctl status slipstream-client --no-pager -l 2>/dev/null | head -10
+    else
+        print_warning "No slipstream service is running"
+    fi
+}
+
 uninstall() {
     echo ""
-    print_warning "Removing Slipstream-Go..."
+    print_warning "This will remove Slipstream-Go completely"
+    print_question "Continue? [y/N]: "
+    read -r CONFIRM
+
+    if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+        echo "Cancelled"
+        return
+    fi
+
+    print_info "Removing Slipstream-Go..."
 
     # Stop and disable services
     systemctl stop slipstream-server 2>/dev/null || true
@@ -349,6 +450,7 @@ uninstall() {
     # Remove files
     rm -f "${INSTALL_DIR}/slipstream-server"
     rm -f "${INSTALL_DIR}/slipstream-client"
+    rm -f "$SCRIPT_INSTALL_PATH"
     rm -f /etc/systemd/system/slipstream-server.service
     rm -f /etc/systemd/system/slipstream-client.service
     rm -rf "${CONFIG_DIR}"
@@ -361,121 +463,108 @@ uninstall() {
     print_success "Slipstream-Go has been uninstalled"
 }
 
-show_help() {
-    echo "Slipstream-Go Installer"
+show_menu() {
     echo ""
-    echo "Usage:"
-    echo "  Server: curl -Ls https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo bash -s -- server --domain DOMAIN [options]"
-    echo "  Client: curl -Ls https://raw.githubusercontent.com/${REPO}/main/install.sh | sudo bash -s -- client --domain DOMAIN --resolver ADDR --pubkey KEY [options]"
+    print_info "Slipstream-Go Management"
     echo ""
-    echo "Commands:"
-    echo "  server      Install DNS tunnel server"
-    echo "  client      Install DNS tunnel client"
-    echo "  uninstall   Remove Slipstream-Go"
-    echo "  help        Show this help"
+    echo "  1) Install/Configure Server"
+    echo "  2) Install/Configure Client"
+    echo "  3) Check service status"
+    echo "  4) View service logs"
+    echo "  5) Show configuration info"
+    echo "  6) Uninstall"
+    echo "  0) Exit"
     echo ""
-    echo "Server Options:"
-    echo "  --domain DOMAIN      Domain NS record (required)"
-    echo "  --port PORT          DNS port (default: 53)"
-    echo "  --target-type TYPE   direct or socks5 (default: direct)"
-    echo "  --target ADDR        Upstream SOCKS5 address"
-    echo "  --max-frags NUM      Max fragments (default: 5)"
-    echo ""
-    echo "Client Options:"
-    echo "  --domain DOMAIN      Domain NS record (required)"
-    echo "  --resolver ADDR      DNS resolver IP:PORT (required)"
-    echo "  --pubkey KEY         Server public key base64 (required)"
-    echo "  --listen ADDR        Local SOCKS5 address (default: 127.0.0.1:1080)"
-    echo ""
-    echo "Examples:"
-    echo "  # Install server"
-    echo "  curl -Ls .../install.sh | sudo bash -s -- server --domain n.example.com"
-    echo ""
-    echo "  # Install server with SOCKS5 upstream"
-    echo "  curl -Ls .../install.sh | sudo bash -s -- server --domain n.example.com --target-type socks5 --target 127.0.0.1:7020"
-    echo ""
-    echo "  # Install client"
-    echo "  curl -Ls .../install.sh | sudo bash -s -- client --domain n.example.com --resolver 8.8.8.8:53 --pubkey \"BASE64KEY\""
+    print_question "Please select an option (0-6): "
 }
 
-parse_args() {
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            --domain)
-                DOMAIN="$2"
-                shift 2
+handle_menu() {
+    while true; do
+        show_menu
+        read -r choice
+
+        case $choice in
+            1)
+                get_server_input
+                deploy_server
                 ;;
-            --port)
-                DNS_PORT="$2"
-                shift 2
+            2)
+                get_client_input
+                deploy_client
                 ;;
-            --target-type)
-                TARGET_TYPE="$2"
-                shift 2
+            3)
+                echo ""
+                if systemctl is-active --quiet slipstream-server; then
+                    print_success "slipstream-server is running"
+                    systemctl status slipstream-server --no-pager -l
+                elif systemctl is-active --quiet slipstream-client; then
+                    print_success "slipstream-client is running"
+                    systemctl status slipstream-client --no-pager -l
+                else
+                    print_warning "No slipstream service is running"
+                fi
                 ;;
-            --target)
-                TARGET_ADDR="$2"
-                shift 2
+            4)
+                echo ""
+                if systemctl is-active --quiet slipstream-server; then
+                    print_info "Showing slipstream-server logs (Ctrl+C to exit)..."
+                    journalctl -u slipstream-server -f
+                elif systemctl is-active --quiet slipstream-client; then
+                    print_info "Showing slipstream-client logs (Ctrl+C to exit)..."
+                    journalctl -u slipstream-client -f
+                else
+                    print_warning "No slipstream service is running"
+                fi
                 ;;
-            --max-frags)
-                MAX_FRAGS="$2"
-                shift 2
+            5)
+                show_config_info
                 ;;
-            --resolver)
-                RESOLVER="$2"
-                shift 2
+            6)
+                uninstall
                 ;;
-            --listen)
-                LISTEN_ADDR="$2"
-                shift 2
-                ;;
-            --pubkey)
-                PUBKEY="$2"
-                shift 2
+            0)
+                print_info "Goodbye!"
+                exit 0
                 ;;
             *)
-                shift
+                print_error "Invalid choice. Please enter 0-6."
                 ;;
         esac
+
+        if [ "$choice" != "4" ]; then
+            echo ""
+            print_question "Press Enter to continue..."
+            read -r
+        fi
     done
 }
 
 # Main
 print_banner
+check_root
 
-# Get command
-CMD="${1:-}"
-shift 2>/dev/null || true
+# If running from pipe (not installed location), install script first then run it
+if [ "$0" != "$SCRIPT_INSTALL_PATH" ]; then
+    print_info "First-time setup - installing script and binaries..."
 
-# Parse remaining args
-parse_args "$@"
+    detect_platform
+    download_binaries
+    create_user
+    setup_config_dir
+    install_script
 
-case "$CMD" in
-    server)
-        check_root
-        detect_platform
-        download_binaries
-        create_user
-        setup_config_dir
-        deploy_server
-        ;;
-    client)
-        check_root
-        detect_platform
-        download_binaries
-        create_user
-        setup_config_dir
-        deploy_client
-        ;;
-    uninstall)
-        check_root
-        uninstall
-        ;;
-    help|--help|-h)
-        show_help
-        ;;
-    *)
-        show_help
-        exit 1
-        ;;
-esac
+    print_success "Installation complete!"
+    echo ""
+    print_info "Starting configuration menu..."
+    echo ""
+
+    # Execute the installed script for interactive menu
+    exec "$SCRIPT_INSTALL_PATH"
+fi
+
+# Running from installed location - show menu
+detect_platform
+download_binaries
+create_user
+setup_config_dir
+handle_menu
