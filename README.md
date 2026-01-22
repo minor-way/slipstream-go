@@ -137,13 +137,13 @@ bash <(curl -Ls https://cdn.jsdelivr.net/gh/minor-way/slipstream-go@main/install
 
 Download from [Releases](https://github.com/minor-way/slipstream-go/releases/latest):
 
-| Platform | File |
-|----------|------|
-| Linux (amd64) | `slipstream-v1.1.0-linux-amd64.tar.gz` |
-| Linux (arm64) | `slipstream-v1.1.0-linux-arm64.tar.gz` |
-| macOS (Intel) | `slipstream-v1.1.0-darwin-amd64.tar.gz` |
-| macOS (Apple Silicon) | `slipstream-v1.1.0-darwin-arm64.tar.gz` |
-| Windows | `slipstream-v1.1.0-windows-amd64.zip` |
+| Platform | File                                    |
+|----------|-----------------------------------------|
+| Linux (amd64) | `slipstream-v1.1.1-linux-amd64.tar.gz`  |
+| Linux (arm64) | `slipstream-v1.1.1-linux-arm64.tar.gz`  |
+| macOS (Intel) | `slipstream-v1.1.1-darwin-amd64.tar.gz` |
+| macOS (Apple Silicon) | `slipstream-v1.1.1-darwin-arm64.tar.gz` |
+| Windows | `slipstream-v1.1.1-windows-amd64.zip`   |
 
 ```bash
 # Example for Linux amd64
