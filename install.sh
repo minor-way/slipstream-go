@@ -154,6 +154,54 @@ generate_keys() {
     print_success "Keys generated in ${CONFIG_DIR}/"
 }
 
+install_iptables_persistent() {
+    # Check if already installed
+    if command -v netfilter-persistent &> /dev/null; then
+        return 0
+    fi
+
+    print_info "Installing iptables-persistent..."
+
+    # Detect package manager and install
+    if command -v apt-get &> /dev/null; then
+        # Debian/Ubuntu
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq
+        apt-get install -y -qq iptables-persistent netfilter-persistent
+    elif command -v dnf &> /dev/null; then
+        # Fedora/RHEL 8+
+        dnf install -y -q iptables-services
+        systemctl enable iptables 2>/dev/null || true
+    elif command -v yum &> /dev/null; then
+        # CentOS/RHEL 7
+        yum install -y -q iptables-services
+        systemctl enable iptables 2>/dev/null || true
+    fi
+
+    print_success "iptables-persistent installed"
+}
+
+configure_firewall() {
+    local port="$1"
+
+    # Check for ufw (Ubuntu/Debian)
+    if command -v ufw &> /dev/null && ufw status | grep -q "active"; then
+        print_info "Configuring ufw firewall..."
+        ufw allow 53/udp >/dev/null 2>&1
+        ufw allow "$port"/udp >/dev/null 2>&1
+        print_success "ufw rules added for ports 53 and ${port}"
+    fi
+
+    # Check for firewalld (CentOS/RHEL/Fedora)
+    if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        print_info "Configuring firewalld..."
+        firewall-cmd --permanent --add-port=53/udp >/dev/null 2>&1
+        firewall-cmd --permanent --add-port="$port"/udp >/dev/null 2>&1
+        firewall-cmd --reload >/dev/null 2>&1
+        print_success "firewalld rules added for ports 53 and ${port}"
+    fi
+}
+
 setup_iptables_redirect() {
     local target_port="$1"
 
@@ -161,6 +209,12 @@ setup_iptables_redirect() {
     if [ "$target_port" = "53" ]; then
         return 0
     fi
+
+    # Install iptables-persistent if needed
+    install_iptables_persistent
+
+    # Configure firewall (ufw/firewalld)
+    configure_firewall "$target_port"
 
     print_info "Setting up iptables redirect from port 53 to ${target_port}..."
 
@@ -180,16 +234,17 @@ setup_iptables_redirect() {
     # Allow traffic on target port
     iptables -I INPUT -p udp --dport "$target_port" -j ACCEPT 2>/dev/null || true
 
-    # Save iptables rules
+    # Save iptables rules persistently
     if command -v netfilter-persistent &> /dev/null; then
-        netfilter-persistent save 2>/dev/null || true
-    elif [ -f /etc/debian_version ]; then
+        netfilter-persistent save >/dev/null 2>&1 || true
+    elif [ -d /etc/iptables ]; then
+        mkdir -p /etc/iptables
         iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
-    elif [ -f /etc/redhat-release ]; then
+    elif [ -d /etc/sysconfig ]; then
         iptables-save > /etc/sysconfig/iptables 2>/dev/null || true
     fi
 
-    print_success "iptables redirect configured: 53 -> ${target_port}"
+    print_success "iptables redirect configured: 53 -> ${target_port} (persistent)"
 }
 
 get_server_input() {
