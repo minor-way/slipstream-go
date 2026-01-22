@@ -62,14 +62,23 @@ func (vc *VirtualConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	sess := vc.Sessions.GetOrCreate(sessAddr.SessionID)
 	fragments := protocol.FragmentPacket(p)
 
-	// No redundancy - DNS cache busting fix handles reliability
-	// QUIC's built-in retransmission handles packet loss
-	for _, frag := range fragments {
-		select {
-		case sess.FragQueue <- frag:
-		default:
-			log.Debug().Str("sess", sessAddr.SessionID).Msg("WriteTo: FragQueue full, dropping fragment")
-			return 0, nil
+	// Only apply redundancy for VERY large packets (TLS Handshake Certificate)
+	// Normal data usually flows fine once connection is up.
+	// Threshold 1100 targets only full MTU packets during handshake.
+	redundancy := 1
+	if len(p) >= 1100 {
+		redundancy = 2
+		log.Debug().Str("sess", sessAddr.SessionID).Int("len", len(p)).Msg("Applying 2x redundancy for TLS handshake packet")
+	}
+
+	for r := 0; r < redundancy; r++ {
+		for _, frag := range fragments {
+			select {
+			case sess.FragQueue <- frag:
+			default:
+				log.Debug().Str("sess", sessAddr.SessionID).Msg("WriteTo: FragQueue full, dropping fragment")
+				return 0, nil
+			}
 		}
 	}
 
