@@ -6,13 +6,24 @@
 
 set -e
 
+# Save script content for later installation (when piped, $0 is not a file)
+SCRIPT_CONTENT_FILE="/tmp/slipstream-install-$$.sh"
+if [ ! -f "$0" ] || [ "$0" = "bash" ] || [ "$0" = "/bin/bash" ]; then
+    # Running from pipe - we're already executing, can't save stdin
+    # Will download fresh copy later
+    SCRIPT_CONTENT_FILE=""
+else
+    # Running from file - copy it
+    cp "$0" "$SCRIPT_CONTENT_FILE" 2>/dev/null || SCRIPT_CONTENT_FILE=""
+fi
+
 VERSION="v1.1.0"
 REPO="minor-way/slipstream-go"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/slipstream"
 SERVICE_USER="slipstream"
 SCRIPT_INSTALL_PATH="/usr/local/bin/slipstream-deploy"
-SCRIPT_URL="https://cdn.jsdelivr.net/gh/${REPO}@main/install.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/${REPO}/main/install.sh"
 
 # Colors
 RED='\033[0;31m'
@@ -48,11 +59,15 @@ check_root() {
 install_script() {
     print_info "Installing slipstream-deploy script..."
 
-    local temp_script="/tmp/slipstream-deploy-new.sh"
-    curl -Ls "$SCRIPT_URL" -o "$temp_script"
-    chmod +x "$temp_script"
-    cp "$temp_script" "$SCRIPT_INSTALL_PATH"
-    rm "$temp_script"
+    if [ -n "$SCRIPT_CONTENT_FILE" ] && [ -f "$SCRIPT_CONTENT_FILE" ]; then
+        # Use saved script content
+        cp "$SCRIPT_CONTENT_FILE" "$SCRIPT_INSTALL_PATH"
+        rm -f "$SCRIPT_CONTENT_FILE"
+    else
+        # Download fresh copy (with cache bypass)
+        curl -sL "${SCRIPT_URL}?t=$(date +%s)" -o "$SCRIPT_INSTALL_PATH"
+    fi
+    chmod +x "$SCRIPT_INSTALL_PATH"
 
     print_success "Script installed to $SCRIPT_INSTALL_PATH"
     print_info "You can now run 'slipstream-deploy' from anywhere"
