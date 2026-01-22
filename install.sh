@@ -99,12 +99,36 @@ detect_platform() {
 }
 
 download_binaries() {
-    # Check if already installed
-    if [ -f "${INSTALL_DIR}/slipstream-server" ] && [ -f "${INSTALL_DIR}/slipstream-client" ]; then
+    # Check if already installed in system path
+    if [ -f "${INSTALL_DIR}/slipstream-server" ] || [ -f "${INSTALL_DIR}/slipstream-client" ]; then
         print_success "Binaries already installed in ${INSTALL_DIR}/"
         return 0
     fi
 
+    # Check for local binaries (extracted in current directory)
+    local local_server="slipstream-server-${OS}-${ARCH}"
+    local local_client="slipstream-client-${OS}-${ARCH}"
+
+    if [ -f "$local_server" ] || [ -f "$local_client" ]; then
+        print_info "Found local binaries, installing..."
+        [ -f "$local_server" ] && mv "$local_server" "${INSTALL_DIR}/slipstream-server" && chmod +x "${INSTALL_DIR}/slipstream-server"
+        [ -f "$local_client" ] && mv "$local_client" "${INSTALL_DIR}/slipstream-client" && chmod +x "${INSTALL_DIR}/slipstream-client"
+        print_success "Binaries installed to ${INSTALL_DIR}/"
+        return 0
+    fi
+
+    # Check for local archive
+    local local_archive="slipstream-${VERSION}-${OS}-${ARCH}.tar.gz"
+    if [ -f "$local_archive" ]; then
+        print_info "Found local archive, extracting..."
+        tar -xzf "$local_archive"
+        [ -f "$local_server" ] && mv "$local_server" "${INSTALL_DIR}/slipstream-server" && chmod +x "${INSTALL_DIR}/slipstream-server"
+        [ -f "$local_client" ] && mv "$local_client" "${INSTALL_DIR}/slipstream-client" && chmod +x "${INSTALL_DIR}/slipstream-client"
+        print_success "Binaries installed to ${INSTALL_DIR}/"
+        return 0
+    fi
+
+    # Download from internet
     print_info "Downloading Slipstream-Go ${VERSION}..."
 
     ARCHIVE="slipstream-${VERSION}-${OS}-${ARCH}.tar.gz"
@@ -115,9 +139,17 @@ download_binaries() {
 
     echo -n "  Downloading ${ARCHIVE}... "
     if command -v curl &> /dev/null; then
-        curl -sL "$URL" -o "${TEMP_DIR}/${ARCHIVE}"
+        if ! curl -sL "$URL" -o "${TEMP_DIR}/${ARCHIVE}" --connect-timeout 10; then
+            echo -e "${RED}failed${NC}"
+            print_error "Download failed. No internet? Place binaries in current directory and re-run."
+            exit 1
+        fi
     elif command -v wget &> /dev/null; then
-        wget -q "$URL" -O "${TEMP_DIR}/${ARCHIVE}"
+        if ! wget -q "$URL" -O "${TEMP_DIR}/${ARCHIVE}" --timeout=10; then
+            echo -e "${RED}failed${NC}"
+            print_error "Download failed. No internet? Place binaries in current directory and re-run."
+            exit 1
+        fi
     else
         print_error "curl or wget required"
         exit 1
@@ -129,9 +161,9 @@ download_binaries() {
     echo -e "${GREEN}done${NC}"
 
     echo -n "  Installing to ${INSTALL_DIR}... "
-    mv "${TEMP_DIR}/slipstream-server-${OS}-${ARCH}" "${INSTALL_DIR}/slipstream-server"
-    mv "${TEMP_DIR}/slipstream-client-${OS}-${ARCH}" "${INSTALL_DIR}/slipstream-client"
-    chmod +x "${INSTALL_DIR}/slipstream-server" "${INSTALL_DIR}/slipstream-client"
+    mv "${TEMP_DIR}/slipstream-server-${OS}-${ARCH}" "${INSTALL_DIR}/slipstream-server" 2>/dev/null || true
+    mv "${TEMP_DIR}/slipstream-client-${OS}-${ARCH}" "${INSTALL_DIR}/slipstream-client" 2>/dev/null || true
+    chmod +x "${INSTALL_DIR}/slipstream-server" "${INSTALL_DIR}/slipstream-client" 2>/dev/null || true
     echo -e "${GREEN}done${NC}"
 
     print_success "Binaries installed to ${INSTALL_DIR}/"
