@@ -334,9 +334,9 @@ get_server_input() {
     esac
 
     # Max fragments
-    print_question "Enter max fragments per DNS response [default: 5]: "
+    print_question "Enter max fragments per DNS response [default: 2]: "
     read -r MAX_FRAGS
-    MAX_FRAGS=${MAX_FRAGS:-5}
+    MAX_FRAGS=${MAX_FRAGS:-2}
 
     print_info "Configuration:"
     print_info "  Domain NS record: $DOMAIN"

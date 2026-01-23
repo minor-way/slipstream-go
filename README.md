@@ -186,7 +186,7 @@ chmod +x deploy.sh
 | `--target-type` | `direct` | `direct` or `socks5` |
 | `--target` | - | Upstream SOCKS5 address |
 | `--privkey-file` | *required* | Ed25519 private key |
-| `--max-frags` | `5` | Max fragments per DNS response |
+| `--max-frags` | `2` | Max fragments per DNS response (keep low for compatibility) |
 | `--log-level` | `info` | `debug`/`info`/`warn`/`error` |
 | `--memory-limit` | `400` | Memory limit in MB |
 
