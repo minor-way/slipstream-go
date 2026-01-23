@@ -19,11 +19,14 @@ const (
 	RxQueueSize  = 2000
 	NumTxWorkers = 4
 	// PollInterval: 50ms matches Rust's DNS_POLL_SLICE_US = 50_000 microseconds
-	// 10ms was too aggressive, causing unnecessary DNS traffic
 	PollInterval = 50 * time.Millisecond
 	WriteTimeout = 5 * time.Second
 	// IdleThreshold: Only poll when truly idle (no recent TX activity)
 	IdleThreshold = 100 * time.Millisecond
+	// ParallelPolls: Send multiple polls simultaneously to increase throughput
+	// With max-frags=2, each poll fetches ~300 bytes. 8 polls = ~2.4KB per RTT.
+	// This simulates a "TCP window" over DNS.
+	ParallelPolls = 8
 )
 
 type DnsPacketConn struct {
@@ -248,9 +251,9 @@ func (c *DnsPacketConn) startRxEngine() {
 			}
 
 			// Turbo Poll: If we got any data, immediately ask for more
-			// Send inline (not goroutine) for minimum latency
+			// Send multiple parallel polls to maximize throughput
 			if gotData {
-				c.sendPoll()
+				c.sendParallelPolls()
 			}
 		}
 	}()
@@ -268,13 +271,25 @@ func (c *DnsPacketConn) startPollEngine() {
 				c.mu.Unlock()
 
 				if idle {
-					c.sendPoll()
+					c.sendParallelPolls()
 				}
 			case <-c.done:
 				return
 			}
 		}
 	}()
+}
+
+// sendParallelPolls sends multiple polls simultaneously to maximize throughput
+// Each poll has a unique nonce so resolver treats them as separate queries
+func (c *DnsPacketConn) sendParallelPolls() {
+	for i := 0; i < ParallelPolls; i++ {
+		c.sendPoll()
+		// Tiny pacing to avoid local UDP buffer overflow
+		if i > 0 && i%4 == 0 {
+			time.Sleep(1 * time.Millisecond)
+		}
+	}
 }
 
 func (c *DnsPacketConn) sendPoll() {
