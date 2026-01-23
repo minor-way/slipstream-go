@@ -62,13 +62,13 @@ func (vc *VirtualConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	sess := vc.Sessions.GetOrCreate(sessAddr.SessionID)
 	fragments := protocol.FragmentPacket(p)
 
-	// Only apply redundancy for VERY large packets (TLS Handshake Certificate)
-	// Normal data usually flows fine once connection is up.
-	// Threshold 1100 targets only full MTU packets during handshake.
+	// RESTORED: Smart Redundancy (safe now that Cache Busting is active)
+	// This won't cause infinite loops anymore because each poll gets fresh data.
+	// We need this because 40% packet loss is killing the handshake.
 	redundancy := 1
-	if len(p) >= 1100 {
+	if len(p) >= 1000 {
 		redundancy = 2
-		log.Debug().Str("sess", sessAddr.SessionID).Int("len", len(p)).Msg("Applying 2x redundancy for TLS handshake packet")
+		log.Debug().Str("sess", sessAddr.SessionID).Int("len", len(p)).Msg("Applying 2x redundancy for Handshake")
 	}
 
 	for r := 0; r < redundancy; r++ {
