@@ -33,7 +33,6 @@ func NewVirtualConn(sm *SessionManager) *VirtualConn {
 
 // InjectPacket is called by DNSHandler when a full packet is reassembled.
 func (vc *VirtualConn) InjectPacket(data []byte, sessionID string) {
-	log.Debug().Str("sess", sessionID).Int("len", len(data)).Msg("InjectPacket: pushing to QUIC")
 	addr := &SessionAddr{SessionID: sessionID}
 	select {
 	case vc.Incoming <- PacketBundle{Data: data, Addr: addr}:
@@ -62,13 +61,10 @@ func (vc *VirtualConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	sess := vc.Sessions.GetOrCreate(sessAddr.SessionID)
 	fragments := protocol.FragmentPacket(p)
 
-	// RESTORED: Smart Redundancy (safe now that Cache Busting is active)
-	// This won't cause infinite loops anymore because each poll gets fresh data.
-	// We need this because 40% packet loss is killing the handshake.
+	// Smart Redundancy: Large packets (handshake) get 2x redundancy
 	redundancy := 1
 	if len(p) >= 1000 {
 		redundancy = 2
-		log.Debug().Str("sess", sessAddr.SessionID).Int("len", len(p)).Msg("Applying 2x redundancy for Handshake")
 	}
 
 	for r := 0; r < redundancy; r++ {
@@ -76,7 +72,7 @@ func (vc *VirtualConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 			select {
 			case sess.FragQueue <- frag:
 			default:
-				log.Debug().Str("sess", sessAddr.SessionID).Msg("WriteTo: FragQueue full, dropping fragment")
+				log.Warn().Str("sess", sessAddr.SessionID).Msg("FragQueue full, dropping fragment")
 				return 0, nil
 			}
 		}

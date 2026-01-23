@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/base32"
 	"encoding/base64"
-	"encoding/binary"
 	"strings"
 
 	"github.com/miekg/dns"
@@ -92,31 +91,19 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 		// Use NoPadding base32 to match client encoding (avoids = in DNS labels)
 		raw, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(normalizedData)
 		if err == nil {
-			// Debug: show fragment header info
-			if len(raw) >= 4 {
-				pktID := binary.BigEndian.Uint16(raw[0:2])
-				total := raw[2]
-				seq := raw[3]
-				log.Debug().Int("rawLen", len(raw)).Str("sess", sessionID).
-					Uint16("pktID", pktID).Uint8("total", total).Uint8("seq", seq).
-					Msg("Received chunk")
-			} else {
-				log.Debug().Int("rawLen", len(raw)).Str("sess", sessionID).Msg("Received chunk (short)")
-			}
-			// Pass chunk to reassembler
+			// Pass chunk to reassembler (no per-fragment logging - too noisy)
 			if fullPacket := sess.Reassembler.IngestChunk(raw); fullPacket != nil {
 				// Inject packet into QUIC Listener
 				if h.Injector != nil {
 					h.Injector.InjectPacket(fullPacket, sessionID)
-					log.Debug().Int("len", len(fullPacket)).Str("sess", sessionID).Msg("Upstream Packet Injected")
+					log.Info().Int("len", len(fullPacket)).Str("sess", sessionID).Msg("Upstream packet complete")
 				}
 			}
 		} else {
-			log.Debug().Err(err).Str("data", dataLabel).Int("len", len(dataLabel)).Msg("Base32 decode failed")
+			log.Warn().Err(err).Int("len", len(dataLabel)).Msg("Base32 decode failed")
 		}
-	} else {
-		log.Debug().Str("sess", sessionID).Msg("Poll query received")
 	}
+	// Note: Poll queries not logged (too frequent)
 
 	// 2. SEND DOWNSTREAM (Fragment packing with size limit)
 	msg := new(dns.Msg)
@@ -133,10 +120,6 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	fragsSent := 0
 
 	// Send fragments from queue until limit reached
-	queueLen := len(sess.FragQueue)
-	if queueLen > 0 {
-		log.Debug().Str("sess", sessionID).Int("queueLen", queueLen).Msg("FragQueue has pending data")
-	}
 	for fragsSent < maxFrags {
 		select {
 		case frag := <-sess.FragQueue:
@@ -146,7 +129,6 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 				Txt: []string{encoded},
 			})
 			fragsSent++
-			log.Debug().Str("sess", sessionID).Int("fragLen", len(frag)).Int("fragsSent", fragsSent).Msg("Queued fragment for response")
 		default:
 			// Queue is empty
 			goto sendResponse
@@ -154,8 +136,5 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 sendResponse:
-	if len(msg.Answer) > 0 {
-		log.Debug().Int("count", len(msg.Answer)).Msg("Sending DNS Response")
-	}
 	w.WriteMsg(msg)
 }
