@@ -45,7 +45,7 @@ func main() {
 	genKey := flag.Bool("gen-key", false, "Generate keys and exit")
 	logLevel := flag.String("log-level", "info", "Log level: debug/info/warn/error")
 	memoryLimit := flag.Int("memory-limit", 400, "Memory limit in MB")
-	maxFrags := flag.Int("max-frags", 2, "Max fragments per DNS response (1-10, default 2 for compatibility)")
+	maxFrags := flag.Int("max-frags", 3, "Max fragments per DNS response (1-20, default 3 for throughput)")
 
 	flag.Parse()
 

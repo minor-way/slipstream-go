@@ -15,21 +15,17 @@ import (
 )
 
 const (
-	TxQueueSize = 2000
-	RxQueueSize = 2000
-	// NumTxWorkers: Increased from 4 to 32 to saturate high-latency link
-	// With 200ms RTT, 4 workers = 20 packets/sec = ~2KB/s upstream (ACK bottleneck)
-	// With 32 workers = 160 packets/sec = ~16KB/s upstream capacity
+	TxQueueSize  = 2000
+	RxQueueSize  = 2000
 	NumTxWorkers = 32
-	// PollInterval: 25ms for faster heartbeat to keep pipe active
+	// PollInterval: 25ms heartbeat for idle polling
 	PollInterval = 25 * time.Millisecond
 	WriteTimeout = 5 * time.Second
 	// IdleThreshold: Only poll when truly idle (no recent TX activity)
 	IdleThreshold = 100 * time.Millisecond
-	// ParallelPolls: Send multiple polls simultaneously to increase throughput
-	// With max-frags=2, each poll fetches ~300 bytes. 16 polls = ~4.8KB per RTT.
-	// This simulates a "TCP window" over DNS.
-	ParallelPolls = 16
+	// ParallelPolls: Increased to 32 for higher throughput
+	// With max-frags=3, each poll fetches ~450 bytes. 32 polls = ~14KB per RTT.
+	ParallelPolls = 32
 )
 
 type DnsPacketConn struct {
@@ -40,6 +36,7 @@ type DnsPacketConn struct {
 
 	rxQueue     chan []byte
 	txQueue     chan []byte
+	pollTrigger chan struct{} // Async trigger for burst polling
 	closeOnce   sync.Once
 	done        chan struct{}
 	lastTxTime  time.Time
@@ -67,6 +64,7 @@ func NewDnsPacketConn(resolver, domain, sessionID string) (*DnsPacketConn, error
 		Conn:        conn,
 		rxQueue:     make(chan []byte, RxQueueSize),
 		txQueue:     make(chan []byte, TxQueueSize),
+		pollTrigger: make(chan struct{}, 1), // Buffer 1 for auto-debouncing
 		done:        make(chan struct{}),
 		reassembler: NewReassembler(),
 	}
@@ -74,6 +72,7 @@ func NewDnsPacketConn(resolver, domain, sessionID string) (*DnsPacketConn, error
 	c.startRxEngine()
 	c.startTxEngine()
 	c.startPollEngine()
+	c.startBurstEngine() // Async polling engine
 
 	return c, nil
 }
@@ -244,10 +243,14 @@ func (c *DnsPacketConn) startRxEngine() {
 				}
 			}
 
-			// Turbo Poll: If we got any data, immediately ask for more
-			// Send multiple parallel polls to maximize throughput
+			// Turbo Poll: If we got data, trigger async burst polling
+			// Non-blocking: if BurstEngine is busy, signal is debounced
 			if gotData {
-				c.sendParallelPolls()
+				select {
+				case c.pollTrigger <- struct{}{}:
+				default:
+					// Already triggered, no need to stack
+				}
 			}
 		}
 	}()
@@ -274,13 +277,30 @@ func (c *DnsPacketConn) startPollEngine() {
 	}()
 }
 
+// startBurstEngine handles async burst polling without blocking RxEngine
+// This reduces effective RTT by not adding dead time to the receive loop
+func (c *DnsPacketConn) startBurstEngine() {
+	go func() {
+		for {
+			select {
+			case <-c.pollTrigger:
+				// Data received, blast parallel polls to keep pipe saturated
+				c.sendParallelPolls()
+			case <-c.done:
+				return
+			}
+		}
+	}()
+}
+
 // sendParallelPolls sends multiple polls simultaneously to maximize throughput
 // Each poll has a unique nonce so resolver treats them as separate queries
 func (c *DnsPacketConn) sendParallelPolls() {
 	for i := 0; i < ParallelPolls; i++ {
 		c.sendPoll()
-		// Tiny pacing to avoid local UDP buffer overflow
-		if i > 0 && i%4 == 0 {
+		// Minimal pacing: 1ms every 8 polls to avoid UDP buffer overflow
+		// 32 polls complete in ~4ms instead of blocking RxEngine
+		if i > 0 && i%8 == 0 {
 			time.Sleep(1 * time.Millisecond)
 		}
 	}
