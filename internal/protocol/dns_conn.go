@@ -15,18 +15,21 @@ import (
 )
 
 const (
-	TxQueueSize  = 2000
-	RxQueueSize  = 2000
-	NumTxWorkers = 4
+	TxQueueSize = 2000
+	RxQueueSize = 2000
+	// NumTxWorkers: Increased from 4 to 32 to saturate high-latency link
+	// With 200ms RTT, 4 workers = 20 packets/sec = ~2KB/s upstream (ACK bottleneck)
+	// With 32 workers = 160 packets/sec = ~16KB/s upstream capacity
+	NumTxWorkers = 32
 	// PollInterval: 50ms matches Rust's DNS_POLL_SLICE_US = 50_000 microseconds
 	PollInterval = 50 * time.Millisecond
 	WriteTimeout = 5 * time.Second
 	// IdleThreshold: Only poll when truly idle (no recent TX activity)
 	IdleThreshold = 100 * time.Millisecond
 	// ParallelPolls: Send multiple polls simultaneously to increase throughput
-	// With max-frags=2, each poll fetches ~300 bytes. 8 polls = ~2.4KB per RTT.
+	// With max-frags=2, each poll fetches ~300 bytes. 16 polls = ~4.8KB per RTT.
 	// This simulates a "TCP window" over DNS.
-	ParallelPolls = 8
+	ParallelPolls = 16
 )
 
 type DnsPacketConn struct {
