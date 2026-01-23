@@ -21,8 +21,8 @@ const (
 	// With 200ms RTT, 4 workers = 20 packets/sec = ~2KB/s upstream (ACK bottleneck)
 	// With 32 workers = 160 packets/sec = ~16KB/s upstream capacity
 	NumTxWorkers = 32
-	// PollInterval: 50ms matches Rust's DNS_POLL_SLICE_US = 50_000 microseconds
-	PollInterval = 50 * time.Millisecond
+	// PollInterval: 25ms for faster heartbeat to keep pipe active
+	PollInterval = 25 * time.Millisecond
 	WriteTimeout = 5 * time.Second
 	// IdleThreshold: Only poll when truly idle (no recent TX activity)
 	IdleThreshold = 100 * time.Millisecond

@@ -178,11 +178,10 @@ func main() {
 		MaxIncomingUniStreams:      1000,
 		MaxStreamReceiveWindow:     6 * 1024 * 1024,
 		MaxConnectionReceiveWindow: 15 * 1024 * 1024,
-		// Optimal MTU for Iran: 512-768 bytes (benchmarked)
-		// 600 bytes / 120 bytes per fragment = 5 fragments
-		// QUIC Initial packets will still be padded to 1200 bytes per spec
-		InitialPacketSize: 600,
-		// Disable PMTU discovery to keep packets small
+		// Use standard QUIC packet size (1200 bytes)
+		// FragmentPacket() handles splitting into DNS-safe chunks
+		// Smaller packets just create more ACK overhead
+		InitialPacketSize:       1200,
 		DisablePathMTUDiscovery: true,
 	})
 	if err != nil {
