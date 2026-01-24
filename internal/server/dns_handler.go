@@ -110,6 +110,12 @@ func (h *DNSHandler) HandleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	msg.SetReply(r)
 	msg.Compress = true
 
+	// EDNS0: Copy OPT record from request to response
+	// This confirms to the resolver that we support large UDP packets (up to 1232 bytes)
+	if opt := r.IsEdns0(); opt != nil {
+		msg.Extra = append(msg.Extra, opt)
+	}
+
 	// Pack multiple fragments per response (configurable via --max-frags)
 	// Each base64-encoded fragment is ~180 bytes (132 raw * 4/3 base64 + header)
 	// Packing more fragments reduces round-trips dramatically

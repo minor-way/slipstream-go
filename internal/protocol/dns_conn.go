@@ -162,6 +162,16 @@ func (c *DnsPacketConn) startTxEngine() {
 					qname := dataLabels + suffix
 
 					msg.SetQuestion(qname, dns.TypeTXT)
+
+					// EDNS0: Signal support for large UDP packets (1232 bytes)
+					// Clear Extra first (msg is reused), then add OPT
+					msg.Extra = nil
+					opt := &dns.OPT{
+						Hdr: dns.RR_Header{Name: ".", Rrtype: dns.TypeOPT},
+					}
+					opt.SetUDPSize(1232)
+					msg.Extra = append(msg.Extra, opt)
+
 					buf, _ := msg.Pack()
 
 					// Send once - QUIC's built-in retransmission handles reliability
@@ -318,6 +328,15 @@ func (c *DnsPacketConn) sendPoll() {
 	qname := "poll." + nonceStr + "." + c.SessionID + "." + c.Domain + "."
 	msg := new(dns.Msg)
 	msg.SetQuestion(qname, dns.TypeTXT)
+
+	// EDNS0: Signal support for large UDP packets (1232 bytes)
+	// This tells the resolver "Don't truncate! I can handle big responses!"
+	opt := &dns.OPT{
+		Hdr: dns.RR_Header{Name: ".", Rrtype: dns.TypeOPT},
+	}
+	opt.SetUDPSize(1232)
+	msg.Extra = append(msg.Extra, opt)
+
 	buf, _ := msg.Pack()
 	c.Conn.WriteToUDP(buf, c.Resolver)
 }
