@@ -23,9 +23,11 @@ const (
 	WriteTimeout = 5 * time.Second
 	// IdleThreshold: Only poll when truly idle (no recent TX activity)
 	IdleThreshold = 100 * time.Millisecond
-	// ParallelPolls: 16 for reliable handshake + BurstEngine for throughput
-	// With max-frags=3, each poll fetches ~450 bytes. 16 polls = ~7KB per RTT.
-	ParallelPolls = 16
+	// ParallelPolls: 20 is the sweet spot for this resolver
+	// Higher values cause DNS resolver congestion/rate limiting
+	// With max-frags=6: (20 * 900) / 0.2s RTT = ~90 KB/sec theoretical
+	// Actual measured: ~95 KB/sec
+	ParallelPolls = 20
 )
 
 type DnsPacketConn struct {
