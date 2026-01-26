@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,7 +26,7 @@ import (
 
 // TunnelManager manages the QUIC connection with auto-reconnection
 type TunnelManager struct {
-	resolver    string
+	resolvers   []string // Multiple resolvers for load balancing
 	domain      string
 	tlsConfig   *tls.Config
 	quicConfig  *quic.Config
@@ -40,13 +41,13 @@ type TunnelManager struct {
 }
 
 // NewTunnelManager creates a new tunnel manager
-func NewTunnelManager(resolver, domain string, tlsConfig *tls.Config) *TunnelManager {
+func NewTunnelManager(resolvers []string, domain string, tlsConfig *tls.Config) *TunnelManager {
 	return &TunnelManager{
-		resolver:  resolver,
+		resolvers: resolvers,
 		domain:    domain,
 		tlsConfig: tlsConfig,
 		quicConfig: &quic.Config{
-			KeepAlivePeriod:            10 * time.Second,
+			KeepAlivePeriod:            30 * time.Second,
 			MaxIdleTimeout:             60 * time.Second,
 			MaxStreamReceiveWindow:     6 * 1024 * 1024,
 			MaxConnectionReceiveWindow: 15 * 1024 * 1024,
@@ -74,8 +75,8 @@ func (tm *TunnelManager) Connect() error {
 	tm.sessionID = generateSessionID()
 	log.Info().Str("session", tm.sessionID).Msg("Generated session ID")
 
-	// Setup DNS transport
-	dnsConn, err := protocol.NewDnsPacketConn(tm.resolver, tm.domain, tm.sessionID)
+	// Setup DNS transport with multiple resolvers for load balancing
+	dnsConn, err := protocol.NewDnsPacketConn(tm.resolvers, tm.domain, tm.sessionID)
 	if err != nil {
 		return err
 	}
@@ -85,7 +86,7 @@ func (tm *TunnelManager) Connect() error {
 	dummyAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 1234}
 
 	// Establish QUIC connection
-	log.Info().Str("resolver", tm.resolver).Str("domain", tm.domain).Msg("Establishing QUIC connection over DNS")
+	log.Info().Int("resolvers", len(tm.resolvers)).Str("domain", tm.domain).Msg("Establishing QUIC connection over DNS")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -180,7 +181,7 @@ func main() {
 	// CLI Flags
 	domain := flag.String("domain", "", "Tunnel domain (required)")
 	listen := flag.String("listen", "127.0.0.1:1080", "Local SOCKS5 listen address")
-	resolver := flag.String("resolver", "", "DNS resolver address (server) (required)")
+	resolversFlag := flag.String("resolvers", "", "Comma-separated DNS resolver addresses for load balancing (required)")
 	pubkeyFile := flag.String("pubkey-file", "", "Server public key for pinning (required)")
 	logLevel := flag.String("log-level", "info", "Log level: debug/info/warn/error")
 	memoryLimit := flag.Int("memory-limit", 200, "Memory limit in MB")
@@ -211,12 +212,22 @@ func main() {
 	if *domain == "" {
 		log.Fatal().Msg("--domain is required")
 	}
-	if *resolver == "" {
-		log.Fatal().Msg("--resolver is required")
+	if *resolversFlag == "" {
+		log.Fatal().Msg("--resolvers is required (comma-separated list of DNS resolvers)")
 	}
 	if *pubkeyFile == "" {
 		log.Fatal().Msg("--pubkey-file is required")
 	}
+
+	// Parse resolvers list
+	resolvers := strings.Split(*resolversFlag, ",")
+	for i, r := range resolvers {
+		resolvers[i] = strings.TrimSpace(r)
+	}
+	if len(resolvers) == 0 || resolvers[0] == "" {
+		log.Fatal().Msg("At least one resolver is required")
+	}
+	log.Info().Int("count", len(resolvers)).Strs("resolvers", resolvers).Msg("Configured DNS resolvers")
 
 	// Load public key and calculate fingerprint
 	pubKey, err := crypto.LoadPublicKey(*pubkeyFile)
@@ -229,8 +240,8 @@ func main() {
 	// Create TLS config with certificate pinning
 	tlsConfig := crypto.GetClientTLSConfig(fingerprint)
 
-	// Create tunnel manager
-	tunnel := NewTunnelManager(*resolver, *domain, tlsConfig)
+	// Create tunnel manager with multiple resolvers
+	tunnel := NewTunnelManager(resolvers, *domain, tlsConfig)
 
 	// Initial connection
 	if err := tunnel.Connect(); err != nil {

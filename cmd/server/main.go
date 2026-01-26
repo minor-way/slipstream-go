@@ -171,7 +171,7 @@ func main() {
 
 	// Create QUIC listener on transport
 	quicListener, err := transport.Listen(tlsConfig, &quic.Config{
-		KeepAlivePeriod:            15 * time.Second, // Send keepalive every 15s
+		KeepAlivePeriod:            35 * time.Second, // Send keepalive every 35s
 		MaxIdleTimeout:             5 * time.Minute,  // 5 minute idle timeout
 		EnableDatagrams:            false,
 		MaxIncomingStreams:         1000,

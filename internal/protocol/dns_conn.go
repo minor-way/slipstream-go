@@ -4,6 +4,7 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"net"
 	"strings"
@@ -31,7 +32,7 @@ const (
 )
 
 type DnsPacketConn struct {
-	Resolver  *net.UDPAddr
+	Resolvers []*net.UDPAddr // Multiple resolvers for load balancing
 	Domain    string
 	SessionID string
 	Conn      *net.UDPConn
@@ -46,10 +47,20 @@ type DnsPacketConn struct {
 	reassembler *Reassembler
 }
 
-func NewDnsPacketConn(resolver, domain, sessionID string) (*DnsPacketConn, error) {
-	rAddr, err := net.ResolveUDPAddr("udp", resolver)
-	if err != nil {
-		return nil, err
+func NewDnsPacketConn(resolvers []string, domain, sessionID string) (*DnsPacketConn, error) {
+	// Resolve ALL resolvers for load balancing
+	var udpAddrs []*net.UDPAddr
+	for _, resolver := range resolvers {
+		rAddr, err := net.ResolveUDPAddr("udp", strings.TrimSpace(resolver))
+		if err != nil {
+			return nil, err
+		}
+		udpAddrs = append(udpAddrs, rAddr)
+		log.Info().Str("resolver", rAddr.String()).Int("index", len(udpAddrs)-1).Msg("Resolver configured")
+	}
+
+	if len(udpAddrs) == 0 {
+		return nil, fmt.Errorf("no valid resolvers provided")
 	}
 
 	conn, err := net.ListenUDP("udp", nil)
@@ -59,8 +70,10 @@ func NewDnsPacketConn(resolver, domain, sessionID string) (*DnsPacketConn, error
 	// Increase OS buffer to avoid drops
 	conn.SetReadBuffer(4 * 1024 * 1024)
 
+	log.Info().Int("count", len(udpAddrs)).Msg("Configured DNS resolvers for load balancing")
+
 	c := &DnsPacketConn{
-		Resolver:    rAddr,
+		Resolvers:   udpAddrs,
 		Domain:      domain,
 		SessionID:   sessionID,
 		Conn:        conn,
@@ -178,7 +191,10 @@ func (c *DnsPacketConn) startTxEngine() {
 
 					// Send once - QUIC's built-in retransmission handles reliability
 					// Double-sending was causing 2x overhead and congestion
-					c.Conn.WriteToUDP(buf, c.Resolver)
+					// Load balance: pick random resolver from pool
+					target := c.Resolvers[rand.Intn(len(c.Resolvers))]
+					c.Conn.WriteToUDP(buf, target)
+					log.Debug().Str("resolver", target.String()).Int("len", len(pkt)).Msg("TX sent")
 				case <-c.done:
 					return
 				}
@@ -210,7 +226,7 @@ func (c *DnsPacketConn) startRxEngine() {
 	go func() {
 		buf := make([]byte, 4096)
 		for {
-			n, _, err := c.Conn.ReadFromUDP(buf)
+			n, srcAddr, err := c.Conn.ReadFromUDP(buf)
 			if err != nil {
 				select {
 				case <-c.done:
@@ -243,7 +259,7 @@ func (c *DnsPacketConn) startRxEngine() {
 						gotData = true
 						// Reassemble fragments into full packets (no per-fragment logging)
 						if fullPacket := c.reassembler.IngestChunk(raw); fullPacket != nil {
-							log.Info().Int("len", len(fullPacket)).Msg("Downstream packet complete")
+							log.Info().Int("len", len(fullPacket)).Str("from", srcAddr.String()).Msg("Downstream packet complete")
 							// Push complete packet to QUIC
 							select {
 							case c.rxQueue <- fullPacket:
@@ -340,7 +356,10 @@ func (c *DnsPacketConn) sendPoll() {
 	msg.Extra = append(msg.Extra, opt)
 
 	buf, _ := msg.Pack()
-	c.Conn.WriteToUDP(buf, c.Resolver)
+	// Load balance: pick random resolver from pool
+	target := c.Resolvers[rand.Intn(len(c.Resolvers))]
+	c.Conn.WriteToUDP(buf, target)
+	log.Debug().Str("resolver", target.String()).Msg("Poll sent")
 }
 
 func (c *DnsPacketConn) SetDeadline(t time.Time) error {
