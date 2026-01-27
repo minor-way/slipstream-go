@@ -28,7 +28,7 @@
 **One-line install** (downloads binary for your OS):
 
 ```bash
-bash <(curl -Ls https://cdn.jsdelivr.net/gh/minor-way/slipstream-go@main/install.sh)
+sudo bash <(curl -Ls https://cdn.jsdelivr.net/gh/minor-way/slipstream-go@main/install.sh)
 ```
 
 Or manually download from [Releases](https://github.com/minor-way/slipstream-go/releases/latest).
