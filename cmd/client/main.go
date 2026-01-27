@@ -40,8 +40,19 @@ type TunnelManager struct {
 	reconnecting atomic.Bool
 }
 
+// randomPacketSize returns a random packet size between 512 and 768 bytes
+// This range is optimal for Iran's DNS resolvers (benchmarked)
+func randomPacketSize() uint16 {
+	b := make([]byte, 2)
+	cryptorand.Read(b)
+	// Range: 512 + (random % 257) = 512 to 768
+	return 512 + (binary.BigEndian.Uint16(b) % 257)
+}
+
 // NewTunnelManager creates a new tunnel manager
 func NewTunnelManager(resolvers []string, domain string, tlsConfig *tls.Config) *TunnelManager {
+	packetSize := randomPacketSize()
+	log.Info().Uint16("packet_size", packetSize).Msg("Using random packet size")
 	return &TunnelManager{
 		resolvers: resolvers,
 		domain:    domain,
@@ -51,11 +62,8 @@ func NewTunnelManager(resolvers []string, domain string, tlsConfig *tls.Config) 
 			MaxIdleTimeout:             60 * time.Second,
 			MaxStreamReceiveWindow:     6 * 1024 * 1024,
 			MaxConnectionReceiveWindow: 15 * 1024 * 1024,
-			// Optimal MTU for Iran: 512-768 bytes (benchmarked)
-			// 600 bytes / 120 bytes per fragment = 5 fragments
-			// QUIC Initial packets will still be padded to 1200 bytes per spec
-			InitialPacketSize: 600,
-			// Disable PMTU discovery to keep packets small after handshake
+			// Random packet size in optimal range for Iran: 512-768 bytes
+			InitialPacketSize:       packetSize,
 			DisablePathMTUDiscovery: true,
 		},
 	}

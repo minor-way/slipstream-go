@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +22,15 @@ import (
 	"slipstream-go/internal/proxy"
 	"slipstream-go/internal/server"
 )
+
+// randomPacketSize returns a random packet size between 512 and 768 bytes
+// This range is optimal for Iran's DNS resolvers (benchmarked)
+func randomPacketSize() uint16 {
+	b := make([]byte, 2)
+	cryptorand.Read(b)
+	// Range: 512 + (random % 257) = 512 to 768
+	return 512 + (binary.BigEndian.Uint16(b) % 257)
+}
 
 // stringSlice is a custom flag type for multiple string values
 type stringSlice []string
@@ -170,6 +181,8 @@ func main() {
 	}
 
 	// Create QUIC listener on transport
+	packetSize := randomPacketSize()
+	log.Info().Uint16("packet_size", packetSize).Msg("Using random packet size")
 	quicListener, err := transport.Listen(tlsConfig, &quic.Config{
 		KeepAlivePeriod:            35 * time.Second, // Send keepalive every 35s
 		MaxIdleTimeout:             5 * time.Minute,  // 5 minute idle timeout
@@ -178,10 +191,8 @@ func main() {
 		MaxIncomingUniStreams:      1000,
 		MaxStreamReceiveWindow:     6 * 1024 * 1024,
 		MaxConnectionReceiveWindow: 15 * 1024 * 1024,
-		// Use standard QUIC packet size (1200 bytes)
-		// FragmentPacket() handles splitting into DNS-safe chunks
-		// Smaller packets just create more ACK overhead
-		InitialPacketSize:       1200,
+		// Random packet size in optimal range for Iran: 512-768 bytes
+		InitialPacketSize:       packetSize,
 		DisablePathMTUDiscovery: true,
 	})
 	if err != nil {

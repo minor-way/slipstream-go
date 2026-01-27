@@ -61,17 +61,18 @@ Slipstream-Go tunnels network traffic through DNS queries and responses, encapsu
 - **SOCKS5 Proxy** - Standard proxy interface
 - **Ed25519 Auth** - Secure key-based authentication
 - **Multi-Domain** - Multiple tunnel domains per server
+- **Multi-Resolver** - Load balancing across DNS resolvers
 - **Auto-Reconnect** - Exponential backoff recovery
 
 </td>
 <td width="50%">
 
 ### Performance
-- **10ms Polling** - Low-latency responses
-- **Multi-TXT** - Up to 5 fragments per response
-- **Pre-fragmentation** - Optimized packet delivery
-- **Memory Limits** - Configurable soft caps
-- **~1-2s Latency** - Comparable to alternatives
+- **Parallel Polling** - 20 concurrent polls for throughput
+- **EDNS0 Support** - Large UDP responses (1232 bytes)
+- **Multi-TXT** - Up to 6 fragments per response
+- **Random Packet Size** - 512-768 bytes optimal range
+- **~95 KB/sec** - Optimized for restrictive networks
 
 </td>
 </tr>
@@ -81,14 +82,39 @@ Slipstream-Go tunnels network traffic through DNS queries and responses, encapsu
 
 ## Comparison
 
-| Feature | Slipstream-Go | Rust | C |
-|:--------|:-------------:|:----:|:-:|
-| Auto-reconnect | ✅ | ❌ | ❌ |
-| Multi-domain | ✅ | ❌ | ❌ |
-| Configurable Multi-TXT | ✅ | ❌ | ❌ |
-| Memory management | Soft limit | Manual | Manual |
-| Build complexity | `go build` | Cargo | Make |
-| Cross-compilation | Built-in | Setup needed | Complex |
+### vs Rust Reference (`mygod/slipstream-rust`)
+
+The Rust version uses `picoquic` (C library via FFI) with custom congestion control. This Go version uses `quic-go` (pure Go) and compensates with different strategies:
+
+| Aspect | **Slipstream-Go** | **Rust Version** |
+|:-------|:------------------|:-----------------|
+| **QUIC Engine** | `quic-go` (Pure Go) | `picoquic` (C binding) |
+| **Congestion Control** | Standard (Cubic) | Custom (`slipstream_mixed_cc`) |
+| **Throughput Strategy** | Multi-Resolver + Parallel Polls | Calculated Pacing |
+| **Performance** | ~95 KB/sec | Optimized for single connection |
+| **Build** | `go build` | Cargo + C toolchain |
+| **Cross-compile** | Built-in | Complex setup |
+
+### vs GetLantern Go (`getlantern/slipstream`)
+
+**Completely different architecture** - not a competitor:
+
+| Aspect | **Slipstream-Go** | **GetLantern** |
+|:-------|:------------------|:---------------|
+| **Architecture** | QUIC **over** DNS (Tunnel) | DNS **over** QUIC (Privacy) |
+| **Purpose** | Bypass network restrictions | Protect DNS queries |
+| **Direction** | Puts QUIC inside DNS | Puts DNS inside QUIC |
+
+### Feature Comparison
+
+| Feature | Slipstream-Go | Rust | GetLantern |
+|:--------|:-------------:|:----:|:----------:|
+| Auto-reconnect | ✅ | ❌ | N/A |
+| Multi-domain | ✅ | ❌ | N/A |
+| Multi-resolver | ✅ | ❌ | N/A |
+| EDNS0 Support | ✅ | ✅ | ✅ |
+| Configurable frags | ✅ | ❌ | N/A |
+| Memory limits | Soft limit | Manual | Standard |
 
 ---
 
@@ -113,9 +139,12 @@ Slipstream-Go tunnels network traffic through DNS queries and responses, encapsu
 ```bash
 ./slipstream-client \
   --domain tunnel.example.com \
-  --resolver SERVER_IP:5353 \
+  --resolvers SERVER_IP:5353 \
   --pubkey-file server.pub
 ```
+
+> 💡 **Multi-Resolver** - For better throughput, use multiple resolvers:
+> `--resolvers "8.8.8.8:53,8.8.4.4:53,1.1.1.1:53"`
 
 ### 4. Use It
 ```bash
@@ -186,7 +215,7 @@ chmod +x deploy.sh
 | `--target-type` | `direct` | `direct` or `socks5` |
 | `--target` | - | Upstream SOCKS5 address |
 | `--privkey-file` | *required* | Ed25519 private key |
-| `--max-frags` | `2` | Max fragments per DNS response (keep low for compatibility) |
+| `--max-frags` | `6` | Max fragments per DNS response (with EDNS0 support) |
 | `--log-level` | `info` | `debug`/`info`/`warn`/`error` |
 | `--memory-limit` | `400` | Memory limit in MB |
 
@@ -195,10 +224,11 @@ chmod +x deploy.sh
 | Flag | Default | Description |
 |:-----|:--------|:------------|
 | `--domain` | *required* | Tunnel domain |
-| `--resolver` | `127.0.0.1:5353` | DNS resolver address |
+| `--resolvers` | *required* | Comma-separated DNS resolvers for load balancing |
 | `--listen` | `127.0.0.1:1080` | Local SOCKS5 address |
 | `--pubkey-file` | *required* | Server public key |
 | `--log-level` | `info` | `debug`/`info`/`warn`/`error` |
+| `--memory-limit` | `200` | Memory limit in MB |
 
 ### Multi-Domain Example
 
@@ -266,7 +296,7 @@ docker run -d \
   -v $(pwd)/keys:/app/keys:ro \
   slipstream-client \
   --domain tunnel.example.com \
-  --resolver YOUR_SERVER_IP:5353 \
+  --resolvers YOUR_SERVER_IP:5353 \
   --listen 0.0.0.0:1080 \
   --pubkey-file /app/keys/server.pub
 ```
@@ -342,9 +372,10 @@ Then run on port 53:
 <details>
 <summary><b>Slow Performance</b></summary>
 
-- Check network latency to DNS server
-- Enable debug logging
-- Verify no packet loss
+- Use multiple resolvers: `--resolvers "resolver1:53,resolver2:53,resolver3:53"`
+- Check DNS resolver rate limiting (some block high-frequency queries)
+- Enable debug logging to see per-resolver packet flow
+- Verify no packet loss with `--log-level debug`
 
 </details>
 
