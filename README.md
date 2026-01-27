@@ -115,7 +115,7 @@ The Rust version uses `picoquic` (C library via FFI) with custom congestion cont
 | EDNS0 Support | ✅ | ✅ | ✅ |
 | Configurable frags | ✅ | ❌ | Partial |
 | Memory limits | Soft limit | Manual | ❌ |
-| Adaptive congestion | Planned | ✅ | ✅ |
+| Adaptive congestion | ❌ (planned) | ✅ | ✅ |
 
 ---
 
