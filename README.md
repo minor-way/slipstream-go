@@ -109,12 +109,13 @@ The Rust version uses `picoquic` (C library via FFI) with custom congestion cont
 
 | Feature | Slipstream-Go | Rust | GetLantern |
 |:--------|:-------------:|:----:|:----------:|
-| Auto-reconnect | ✅ | ❌ | N/A |
-| Multi-domain | ✅ | ❌ | N/A |
-| Multi-resolver | ✅ | ❌ | N/A |
+| Auto-reconnect | ✅ | ❌ | ❌ |
+| Multi-domain | ✅ | ❌ | ✅ |
+| Multi-resolver | ✅ | ❌ | ❌ (planned) |
 | EDNS0 Support | ✅ | ✅ | ✅ |
-| Configurable frags | ✅ | ❌ | N/A |
-| Memory limits | Soft limit | Manual | Standard |
+| Configurable frags | ✅ | ❌ | Partial |
+| Memory limits | Soft limit | Manual | ❌ |
+| Adaptive congestion | ❌ | ✅ | ✅ |
 
 ---
 
