@@ -28,7 +28,7 @@
 **One-line install** (downloads binary for your OS):
 
 ```bash
-sudo bash <(curl -Ls https://cdn.jsdelivr.net/gh/minor-way/slipstream-go@main/install.sh)
+sudo bash <(curl -Ls https://raw.githubusercontent.com/minor-way/slipstream-go/main/install.sh)
 ```
 
 Or manually download from [Releases](https://github.com/minor-way/slipstream-go/releases/latest).
@@ -161,7 +161,7 @@ curl -x socks5://127.0.0.1:1080 https://ifconfig.me
 
 ```bash
 # Auto-detect OS and download binary
-bash <(curl -Ls https://cdn.jsdelivr.net/gh/minor-way/slipstream-go@main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/minor-way/slipstream-go/main/install.sh)
 ```
 
 ### Download Binary
