@@ -170,16 +170,16 @@ Download from [Releases](https://github.com/minor-way/slipstream-go/releases/lat
 
 | Platform | File                                    |
 |----------|-----------------------------------------|
-| Linux (amd64) | `slipstream-v1.1.1-linux-amd64.tar.gz`  |
-| Linux (arm64) | `slipstream-v1.1.1-linux-arm64.tar.gz`  |
-| macOS (Intel) | `slipstream-v1.1.1-darwin-amd64.tar.gz` |
-| macOS (Apple Silicon) | `slipstream-v1.1.1-darwin-arm64.tar.gz` |
-| Windows | `slipstream-v1.1.1-windows-amd64.zip`   |
+| Linux (amd64) | `slipstream-v1.2.0-linux-amd64.tar.gz`  |
+| Linux (arm64) | `slipstream-v1.2.0-linux-arm64.tar.gz`  |
+| macOS (Intel) | `slipstream-v1.2.0-darwin-amd64.tar.gz` |
+| macOS (Apple Silicon) | `slipstream-v1.2.0-darwin-arm64.tar.gz` |
+| Windows | `slipstream-v1.2.0-windows-amd64.zip`   |
 
 ```bash
 # Example for Linux amd64
-curl -LO https://github.com/minor-way/slipstream-go/releases/download/v1.1.1/slipstream-v1.1.1-linux-amd64.tar.gz
-tar -xzf slipstream-v1.1.1-linux-amd64.tar.gz
+curl -LO https://github.com/minor-way/slipstream-go/releases/download/v1.2.0/slipstream-v1.2.0-linux-amd64.tar.gz
+tar -xzf slipstream-v1.2.0-linux-amd64.tar.gz
 chmod +x slipstream-server slipstream-client
 ```
 
