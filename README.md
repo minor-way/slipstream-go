@@ -141,7 +141,8 @@ The Rust version uses `picoquic` (C library via FFI) with custom congestion cont
 ./slipstream-client \
   --domain tunnel.example.com \
   --resolvers SERVER_IP:5353 \
-  --pubkey-file server.pub
+  --pubkey-file server.pub \
+  --listen 127.0.0.1:1080
 ```
 
 > 💡 **Multi-Resolver** - For better throughput, use multiple resolvers:
