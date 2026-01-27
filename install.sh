@@ -17,7 +17,7 @@ else
     cp "$0" "$SCRIPT_CONTENT_FILE" 2>/dev/null || SCRIPT_CONTENT_FILE=""
 fi
 
-VERSION="v1.1.3"
+VERSION="v1.2.0"
 REPO="minor-way/slipstream-go"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/slipstream"
@@ -334,9 +334,9 @@ get_server_input() {
     esac
 
     # Max fragments
-    print_question "Enter max fragments per DNS response [default: 2]: "
+    print_question "Enter max fragments per DNS response [default: 6]: "
     read -r MAX_FRAGS
-    MAX_FRAGS=${MAX_FRAGS:-2}
+    MAX_FRAGS=${MAX_FRAGS:-6}
 
     print_info "Configuration:"
     print_info "  Domain NS record: $DOMAIN"
@@ -445,14 +445,14 @@ get_client_input() {
         fi
     done
 
-    # Resolver
+    # Resolvers (comma-separated for load balancing)
     while true; do
-        print_question "Enter DNS resolver address (e.g., 8.8.8.8:53): "
-        read -r RESOLVER
-        if [[ -n "$RESOLVER" ]]; then
+        print_question "Enter DNS resolvers (comma-separated, e.g., 8.8.8.8:53,8.8.4.4:53): "
+        read -r RESOLVERS
+        if [[ -n "$RESOLVERS" ]]; then
             break
         else
-            print_error "DNS resolver is required"
+            print_error "At least one DNS resolver is required"
         fi
     done
 
@@ -475,7 +475,7 @@ get_client_input() {
 
     print_info "Configuration:"
     print_info "  Domain NS record: $DOMAIN"
-    print_info "  Resolver: $RESOLVER"
+    print_info "  Resolvers: $RESOLVERS"
     print_info "  Listen: $LISTEN_ADDR"
 }
 
@@ -509,7 +509,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-ExecStart=${INSTALL_DIR}/slipstream-client --domain ${DOMAIN} --resolver ${RESOLVER} --listen ${LISTEN_ADDR} --pubkey-file ${CONFIG_DIR}/server.pub --log-level info
+ExecStart=${INSTALL_DIR}/slipstream-client --domain ${DOMAIN} --resolvers ${RESOLVERS} --listen ${LISTEN_ADDR} --pubkey-file ${CONFIG_DIR}/server.pub --log-level info
 Restart=always
 RestartSec=5
 LimitNOFILE=65535
@@ -538,7 +538,7 @@ EOF
     echo ""
     echo -e "${CYAN}Configuration:${NC}"
     echo "  Domain:       ${DOMAIN}"
-    echo "  Resolver:     ${RESOLVER}"
+    echo "  Resolvers:    ${RESOLVERS}"
     echo "  Listen:       ${LISTEN_ADDR}"
     echo "  Public Key:   ${CONFIG_DIR}/server.pub"
     echo ""
