@@ -170,16 +170,16 @@ Download from [Releases](https://github.com/minor-way/slipstream-go/releases/lat
 
 | Platform | File                                    |
 |----------|-----------------------------------------|
-| Linux (amd64) | `slipstream-v1.2.0-linux-amd64.tar.gz`  |
-| Linux (arm64) | `slipstream-v1.2.0-linux-arm64.tar.gz`  |
-| macOS (Intel) | `slipstream-v1.2.0-darwin-amd64.tar.gz` |
-| macOS (Apple Silicon) | `slipstream-v1.2.0-darwin-arm64.tar.gz` |
-| Windows | `slipstream-v1.2.0-windows-amd64.zip`   |
+| Linux (amd64) | `slipstream-v1.3.0-linux-amd64.tar.gz`  |
+| Linux (arm64) | `slipstream-v1.3.0-linux-arm64.tar.gz`  |
+| macOS (Intel) | `slipstream-v1.3.0-darwin-amd64.tar.gz` |
+| macOS (Apple Silicon) | `slipstream-v1.3.0-darwin-arm64.tar.gz` |
+| Windows | `slipstream-v1.3.0-windows-amd64.zip`   |
 
 ```bash
 # Example for Linux amd64
-curl -LO https://github.com/minor-way/slipstream-go/releases/download/v1.2.0/slipstream-v1.2.0-linux-amd64.tar.gz
-tar -xzf slipstream-v1.2.0-linux-amd64.tar.gz
+curl -LO https://github.com/minor-way/slipstream-go/releases/download/v1.3.0/slipstream-v1.3.0-linux-amd64.tar.gz
+tar -xzf slipstream-v1.3.0-linux-amd64.tar.gz
 chmod +x slipstream-server slipstream-client
 ```
 
@@ -218,6 +218,8 @@ chmod +x deploy.sh
 | `--target` | - | Upstream SOCKS5 address |
 | `--privkey-file` | *required* | Ed25519 private key |
 | `--max-frags` | `6` | Max fragments per DNS response (with EDNS0 support) |
+| `--min-packet-size` | `512` | Minimum QUIC packet size in bytes (512-1200) |
+| `--max-packet-size` | `768` | Maximum QUIC packet size in bytes (512-1200) |
 | `--log-level` | `info` | `debug`/`info`/`warn`/`error` |
 | `--memory-limit` | `400` | Memory limit in MB |
 
@@ -229,6 +231,8 @@ chmod +x deploy.sh
 | `--resolvers` | *required* | Comma-separated DNS resolvers for load balancing |
 | `--listen` | `127.0.0.1:1080` | Local SOCKS5 address |
 | `--pubkey-file` | *required* | Server public key |
+| `--min-packet-size` | `512` | Minimum QUIC packet size in bytes (512-1200) |
+| `--max-packet-size` | `768` | Maximum QUIC packet size in bytes (512-1200) |
 | `--log-level` | `info` | `debug`/`info`/`warn`/`error` |
 | `--memory-limit` | `200` | Memory limit in MB |
 

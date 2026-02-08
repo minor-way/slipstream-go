@@ -40,19 +40,21 @@ type TunnelManager struct {
 	reconnecting atomic.Bool
 }
 
-// randomPacketSize returns a random packet size between 512 and 768 bytes
-// This range is optimal for Iran's DNS resolvers (benchmarked)
-func randomPacketSize() uint16 {
+// randomPacketSize returns a random packet size between min and max bytes
+func randomPacketSize(minSize, maxSize uint16) uint16 {
+	if minSize >= maxSize {
+		return minSize
+	}
 	b := make([]byte, 2)
 	cryptorand.Read(b)
-	// Range: 512 + (random % 257) = 512 to 768
-	return 512 + (binary.BigEndian.Uint16(b) % 257)
+	rangeSize := maxSize - minSize + 1
+	return minSize + (binary.BigEndian.Uint16(b) % rangeSize)
 }
 
 // NewTunnelManager creates a new tunnel manager
-func NewTunnelManager(resolvers []string, domain string, tlsConfig *tls.Config) *TunnelManager {
-	packetSize := randomPacketSize()
-	log.Info().Uint16("packet_size", packetSize).Msg("Using random packet size")
+func NewTunnelManager(resolvers []string, domain string, tlsConfig *tls.Config, minPacket, maxPacket uint16) *TunnelManager {
+	packetSize := randomPacketSize(minPacket, maxPacket)
+	log.Info().Uint16("packet_size", packetSize).Uint16("min", minPacket).Uint16("max", maxPacket).Msg("Using random packet size")
 	return &TunnelManager{
 		resolvers: resolvers,
 		domain:    domain,
@@ -193,6 +195,8 @@ func main() {
 	pubkeyFile := flag.String("pubkey-file", "", "Server public key for pinning (required)")
 	logLevel := flag.String("log-level", "info", "Log level: debug/info/warn/error")
 	memoryLimit := flag.Int("memory-limit", 200, "Memory limit in MB")
+	minPacketSize := flag.Int("min-packet-size", 512, "Minimum QUIC packet size in bytes (512-1200)")
+	maxPacketSize := flag.Int("max-packet-size", 768, "Maximum QUIC packet size in bytes (512-1200)")
 
 	flag.Parse()
 
@@ -248,8 +252,19 @@ func main() {
 	// Create TLS config with certificate pinning
 	tlsConfig := crypto.GetClientTLSConfig(fingerprint)
 
+	// Validate packet size range
+	if *minPacketSize < 512 || *minPacketSize > 1200 {
+		log.Fatal().Int("min", *minPacketSize).Msg("--min-packet-size must be between 512 and 1200")
+	}
+	if *maxPacketSize < 512 || *maxPacketSize > 1200 {
+		log.Fatal().Int("max", *maxPacketSize).Msg("--max-packet-size must be between 512 and 1200")
+	}
+	if *minPacketSize > *maxPacketSize {
+		log.Fatal().Int("min", *minPacketSize).Int("max", *maxPacketSize).Msg("--min-packet-size cannot be greater than --max-packet-size")
+	}
+
 	// Create tunnel manager with multiple resolvers
-	tunnel := NewTunnelManager(resolvers, *domain, tlsConfig)
+	tunnel := NewTunnelManager(resolvers, *domain, tlsConfig, uint16(*minPacketSize), uint16(*maxPacketSize))
 
 	// Initial connection
 	if err := tunnel.Connect(); err != nil {

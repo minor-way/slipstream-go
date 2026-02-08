@@ -23,13 +23,15 @@ import (
 	"slipstream-go/internal/server"
 )
 
-// randomPacketSize returns a random packet size between 512 and 768 bytes
-// This range is optimal for Iran's DNS resolvers (benchmarked)
-func randomPacketSize() uint16 {
+// randomPacketSize returns a random packet size between min and max bytes
+func randomPacketSize(minSize, maxSize uint16) uint16 {
+	if minSize >= maxSize {
+		return minSize
+	}
 	b := make([]byte, 2)
 	cryptorand.Read(b)
-	// Range: 512 + (random % 257) = 512 to 768
-	return 512 + (binary.BigEndian.Uint16(b) % 257)
+	rangeSize := maxSize - minSize + 1
+	return minSize + (binary.BigEndian.Uint16(b) % rangeSize)
 }
 
 // stringSlice is a custom flag type for multiple string values
@@ -57,6 +59,8 @@ func main() {
 	logLevel := flag.String("log-level", "info", "Log level: debug/info/warn/error")
 	memoryLimit := flag.Int("memory-limit", 400, "Memory limit in MB")
 	maxFrags := flag.Int("max-frags", 6, "Max fragments per DNS response (1-20, default 6 with EDNS0)")
+	minPacketSize := flag.Int("min-packet-size", 512, "Minimum QUIC packet size in bytes (512-1200)")
+	maxPacketSize := flag.Int("max-packet-size", 768, "Maximum QUIC packet size in bytes (512-1200)")
 
 	flag.Parse()
 
@@ -180,9 +184,20 @@ func main() {
 		VerifySourceAddress: func(net.Addr) bool { return true },
 	}
 
+	// Validate packet size range
+	if *minPacketSize < 512 || *minPacketSize > 1200 {
+		log.Fatal().Int("min", *minPacketSize).Msg("--min-packet-size must be between 512 and 1200")
+	}
+	if *maxPacketSize < 512 || *maxPacketSize > 1200 {
+		log.Fatal().Int("max", *maxPacketSize).Msg("--max-packet-size must be between 512 and 1200")
+	}
+	if *minPacketSize > *maxPacketSize {
+		log.Fatal().Int("min", *minPacketSize).Int("max", *maxPacketSize).Msg("--min-packet-size cannot be greater than --max-packet-size")
+	}
+
 	// Create QUIC listener on transport
-	packetSize := randomPacketSize()
-	log.Info().Uint16("packet_size", packetSize).Msg("Using random packet size")
+	packetSize := randomPacketSize(uint16(*minPacketSize), uint16(*maxPacketSize))
+	log.Info().Uint16("packet_size", packetSize).Uint16("min", uint16(*minPacketSize)).Uint16("max", uint16(*maxPacketSize)).Msg("Using random packet size")
 	quicListener, err := transport.Listen(tlsConfig, &quic.Config{
 		KeepAlivePeriod:            35 * time.Second, // Send keepalive every 35s
 		MaxIdleTimeout:             5 * time.Minute,  // 5 minute idle timeout

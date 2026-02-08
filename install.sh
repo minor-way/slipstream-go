@@ -17,7 +17,7 @@ else
     cp "$0" "$SCRIPT_CONTENT_FILE" 2>/dev/null || SCRIPT_CONTENT_FILE=""
 fi
 
-VERSION="v1.2.0"
+VERSION="v1.3.0"
 REPO="minor-way/slipstream-go"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/slipstream"
@@ -338,12 +338,22 @@ get_server_input() {
     read -r MAX_FRAGS
     MAX_FRAGS=${MAX_FRAGS:-6}
 
+    # Packet size
+    print_question "Enter min QUIC packet size in bytes [default: 512]: "
+    read -r MIN_PACKET_SIZE
+    MIN_PACKET_SIZE=${MIN_PACKET_SIZE:-512}
+
+    print_question "Enter max QUIC packet size in bytes [default: 768]: "
+    read -r MAX_PACKET_SIZE
+    MAX_PACKET_SIZE=${MAX_PACKET_SIZE:-768}
+
     print_info "Configuration:"
     print_info "  Domain NS record: $DOMAIN"
     print_info "  DNS Port: $DNS_PORT"
     print_info "  Target Type: $TARGET_TYPE"
     [[ -n "$TARGET_ADDR" ]] && print_info "  Target: $TARGET_ADDR"
     print_info "  Max Frags: $MAX_FRAGS"
+    print_info "  Packet Size: $MIN_PACKET_SIZE-$MAX_PACKET_SIZE bytes"
 }
 
 deploy_server() {
@@ -356,7 +366,7 @@ deploy_server() {
     SERVICE_FILE="/etc/systemd/system/slipstream-server.service"
 
     # Build ExecStart command
-    EXEC_CMD="${INSTALL_DIR}/slipstream-server --domain ${DOMAIN} --dns-port ${DNS_PORT} --target-type ${TARGET_TYPE} --privkey-file ${CONFIG_DIR}/server.key --max-frags ${MAX_FRAGS} --log-level info"
+    EXEC_CMD="${INSTALL_DIR}/slipstream-server --domain ${DOMAIN} --dns-port ${DNS_PORT} --target-type ${TARGET_TYPE} --privkey-file ${CONFIG_DIR}/server.key --max-frags ${MAX_FRAGS} --min-packet-size ${MIN_PACKET_SIZE} --max-packet-size ${MAX_PACKET_SIZE} --log-level info"
 
     if [[ -n "$TARGET_ADDR" ]]; then
         EXEC_CMD="${EXEC_CMD} --target ${TARGET_ADDR}"
@@ -473,10 +483,20 @@ get_client_input() {
         fi
     done
 
+    # Packet size
+    print_question "Enter min QUIC packet size in bytes [default: 512]: "
+    read -r MIN_PACKET_SIZE
+    MIN_PACKET_SIZE=${MIN_PACKET_SIZE:-512}
+
+    print_question "Enter max QUIC packet size in bytes [default: 768]: "
+    read -r MAX_PACKET_SIZE
+    MAX_PACKET_SIZE=${MAX_PACKET_SIZE:-768}
+
     print_info "Configuration:"
     print_info "  Domain NS record: $DOMAIN"
     print_info "  Resolvers: $RESOLVERS"
     print_info "  Listen: $LISTEN_ADDR"
+    print_info "  Packet Size: $MIN_PACKET_SIZE-$MAX_PACKET_SIZE bytes"
 }
 
 deploy_client() {
@@ -509,7 +529,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-ExecStart=${INSTALL_DIR}/slipstream-client --domain ${DOMAIN} --resolvers ${RESOLVERS} --listen ${LISTEN_ADDR} --pubkey-file ${CONFIG_DIR}/server.pub --log-level info
+ExecStart=${INSTALL_DIR}/slipstream-client --domain ${DOMAIN} --resolvers ${RESOLVERS} --listen ${LISTEN_ADDR} --pubkey-file ${CONFIG_DIR}/server.pub --min-packet-size ${MIN_PACKET_SIZE} --max-packet-size ${MAX_PACKET_SIZE} --log-level info
 Restart=always
 RestartSec=5
 LimitNOFILE=65535
